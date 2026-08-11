@@ -2204,7 +2204,10 @@ onBeforeUnmount(() => {
                 · 放到具体床位与入住日期
               </span>
             </div>
-            <Spin :spinning="loading" wrapper-class-name="scheduler-spin">
+            <Spin
+              :classes="{ root: 'scheduler-spin' }"
+              :spinning="loading"
+            >
               <Empty
                 v-if="!selectedBuildId && !loading"
                 description="请选择区域和楼栋查看排房管理"
