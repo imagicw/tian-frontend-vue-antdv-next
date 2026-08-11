@@ -44,7 +44,7 @@ async function fetchTenantList() {
     const websiteTenantPromise = getTenantByWebsite(window.location.hostname);
     tenantList.value = await getTenantSimpleList();
 
-    // 选中租户：域名 > store 中的租户 > 首个租户
+    // 选中租户：域名 > store 中的租户 > 环境变量默认值 > 首个租户
     let tenantId: null | number = null;
     const websiteTenant = await websiteTenantPromise;
     if (websiteTenant?.id) {
@@ -53,6 +53,9 @@ async function fetchTenantList() {
     // 如果没有从域名获取到租户，尝试从 store 中获取
     if (!tenantId && accessStore.tenantId) {
       tenantId = accessStore.tenantId;
+    }
+    if (!tenantId) {
+      tenantId = Number(import.meta.env.VITE_APP_DEFAULT_TENANT_ID) || null;
     }
     // 如果还是没有租户，使用列表中的第一个
     if (!tenantId && tenantList.value?.[0]?.id) {

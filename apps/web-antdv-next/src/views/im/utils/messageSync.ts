@@ -81,7 +81,7 @@ export function enqueueConversationBarrier<T>(operation: () => Promise<T>): Prom
 
 /** 终态优先；相同优先级使用后到达状态 */
 export function reduceMessageState<T>(
-  current: { priority: MessageTerminalPriority; value?: T } | undefined,
+  current: undefined | { priority: MessageTerminalPriority; value?: T },
   incoming: { priority: MessageTerminalPriority; value?: T }
 ) {
   return current && current.priority > incoming.priority ? current : incoming

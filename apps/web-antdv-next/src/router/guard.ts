@@ -4,7 +4,12 @@ import { LOGIN_PATH } from '@vben/constants';
 import { $t } from '@vben/locales';
 import { preferences } from '@vben/preferences';
 import { useAccessStore, useDictStore, useUserStore } from '@vben/stores';
-import { startProgress, stopProgress } from '@vben/utils';
+import {
+  cloneDeep,
+  filterTree,
+  startProgress,
+  stopProgress,
+} from '@vben/utils';
 
 import { message } from 'antdv-next';
 
@@ -116,13 +121,25 @@ function setupAccessGuard(router: Router) {
       }
     }
     const userRoles = userStore.userRoles ?? [];
+    const accessCodes = new Set(accessStore.accessCodes);
+    const permissionRoutes = filterTree(cloneDeep(accessRoutes), (route) => {
+      const requiredCodes = Array.isArray(route.meta?.access)
+        ? route.meta.access.filter(
+            (code): code is string => typeof code === 'string',
+          )
+        : [];
+      return (
+        !requiredCodes.length ||
+        requiredCodes.some((code) => accessCodes.has(code))
+      );
+    });
 
     // 生成菜单和路由
     const { accessibleMenus, accessibleRoutes } = await generateAccess({
       roles: userRoles,
       router,
       // 则会在菜单中显示，但是访问会被重定向到403
-      routes: accessRoutes,
+      routes: permissionRoutes,
     });
 
     // 保存菜单信息和路由信息

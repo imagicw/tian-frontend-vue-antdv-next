@@ -185,7 +185,7 @@ watch(
       </template>
     </Space>
 
-    <Dropdown v-if="getDropdownList.length > 0" :trigger="['hover']">
+    <Dropdown v-if="getDropdownList.length > 0" :trigger="['click']">
       <slot name="more">
         <Button type="link">
           {{ $t('page.action.more') }}

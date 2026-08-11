@@ -21,6 +21,7 @@ const props = withDefaults(
     loading?: boolean;
   }>(),
   {
+    id: undefined,
     loading: false,
   },
 );

@@ -1,7 +1,7 @@
-import { initPreferences } from '@vben/preferences';
+import { initPreferences, updatePreferences } from '@vben/preferences';
 import { unmountGlobalLoading } from '@vben/utils';
 
-import { overridesPreferences } from './preferences';
+import { overridesPreferences, preferencesExtension } from './preferences';
 
 /**
  * 应用初始化完成之后再进行页面加载渲染
@@ -15,9 +15,18 @@ async function initApplication() {
 
   // app偏好设置初始化
   await initPreferences({
-    // extension: preferencesExtension,
+    extension: preferencesExtension,
     namespace,
     overrides: overridesPreferences,
+  });
+
+  // 品牌 Logo 不属于用户偏好，始终使用当前应用配置，避免旧缓存覆盖。
+  updatePreferences({
+    logo: {
+      fit: 'contain',
+      source: '/logo.svg',
+      sourceDark: '/logo-dark.svg',
+    },
   });
 
   // 启动应用并挂载

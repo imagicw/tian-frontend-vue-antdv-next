@@ -36,7 +36,7 @@ export namespace SystemSocialUserApi {
 /** 查询社交用户列表 */
 export function getSocialUserPage(params: PageParam) {
   return requestClient.get<PageResult<SystemSocialUserApi.SocialUser>>(
-    '/system/social-user/page',
+    '/system/third-party-user/page',
     { params },
   );
 }
@@ -44,23 +44,25 @@ export function getSocialUserPage(params: PageParam) {
 /** 查询社交用户详情 */
 export function getSocialUser(id: number) {
   return requestClient.get<SystemSocialUserApi.SocialUser>(
-    `/system/social-user/get?id=${id}`,
+    `/system/third-party-user/get?id=${id}`,
   );
 }
 
 /** 社交绑定，使用 code 授权码 */
 export function socialBind(data: SystemSocialUserApi.SocialUserBindReqVO) {
-  return requestClient.post<boolean>('/system/social-user/bind', data);
+  return requestClient.post<boolean>('/system/third-party-user/bind', data);
 }
 
 /** 取消社交绑定 */
 export function socialUnbind(data: SystemSocialUserApi.SocialUserUnbindReqVO) {
-  return requestClient.delete<boolean>('/system/social-user/unbind', { data });
+  return requestClient.delete<boolean>('/system/third-party-user/unbind', {
+    data,
+  });
 }
 
 /** 获得绑定社交用户列表 */
 export function getBindSocialUserList() {
   return requestClient.get<SystemSocialUserApi.SocialUser[]>(
-    '/system/social-user/get-bind-list',
+    '/system/third-party-user/get-bind-list',
   );
 }

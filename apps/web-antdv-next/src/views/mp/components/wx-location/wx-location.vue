@@ -7,7 +7,7 @@ import { IconifyIcon } from '@vben/icons';
 
 import { Col, message, Row } from 'antdv-next';
 
-import { getTradeConfig } from '#/api/mall/trade/config';
+import { getLocationConfig } from '#/api/mp/location-config';
 
 /** 微信消息 - 定位 */
 defineOptions({ name: 'WxLocation' });
@@ -31,7 +31,7 @@ const mapImageUrl = computed(() => {
 
 async function fetchQqMapKey() {
   try {
-    const data = await getTradeConfig();
+    const data = await getLocationConfig();
     fetchedQqMapKey.value = data.tencentLbsKey ?? '';
     if (!fetchedQqMapKey.value) {
       message.warning('请先配置腾讯位置服务密钥');

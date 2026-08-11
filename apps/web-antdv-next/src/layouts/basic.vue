@@ -52,6 +52,7 @@ const { closeOtherTabs, refreshTab } = useTabs();
 const notifications = ref<NotificationItem[]>([]);
 const unreadCount = ref(0);
 const showDot = computed(() => unreadCount.value > 0);
+const showImHome = computed(() => router.hasRoute('ImHome'));
 
 const [HelpModal, helpModalApi] = useVbenModal({
   connectedComponent: Help,
@@ -310,7 +311,7 @@ watch(
       </div>
     </template>
     <template #header-right-900>
-      <Tooltip title="IM 聊天">
+      <Tooltip v-if="showImHome" title="IM 聊天">
         <button
           class="hover:bg-accent hover:text-accent-foreground mr-1 inline-flex size-8 items-center justify-center rounded-md transition-colors"
           type="button"

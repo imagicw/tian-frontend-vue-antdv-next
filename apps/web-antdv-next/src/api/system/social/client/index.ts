@@ -21,7 +21,7 @@ export namespace SystemSocialClientApi {
 /** 查询社交客户端列表 */
 export function getSocialClientPage(params: PageParam) {
   return requestClient.get<PageResult<SystemSocialClientApi.SocialClient>>(
-    '/system/social-client/page',
+    '/system/third-party-client/page',
     { params },
   );
 }
@@ -29,28 +29,28 @@ export function getSocialClientPage(params: PageParam) {
 /** 查询社交客户端详情 */
 export function getSocialClient(id: number) {
   return requestClient.get<SystemSocialClientApi.SocialClient>(
-    `/system/social-client/get?id=${id}`,
+    `/system/third-party-client/get?id=${id}`,
   );
 }
 
 /** 新增社交客户端 */
 export function createSocialClient(data: SystemSocialClientApi.SocialClient) {
-  return requestClient.post('/system/social-client/create', data);
+  return requestClient.post('/system/third-party-client/create', data);
 }
 
 /** 修改社交客户端 */
 export function updateSocialClient(data: SystemSocialClientApi.SocialClient) {
-  return requestClient.put('/system/social-client/update', data);
+  return requestClient.put('/system/third-party-client/update', data);
 }
 
 /** 删除社交客户端 */
 export function deleteSocialClient(id: number) {
-  return requestClient.delete(`/system/social-client/delete?id=${id}`);
+  return requestClient.delete(`/system/third-party-client/delete?id=${id}`);
 }
 
 /** 批量删除社交客户端 */
 export function deleteSocialClientList(ids: number[]) {
   return requestClient.delete(
-    `/system/social-client/delete-list?ids=${ids.join(',')}`,
+    `/system/third-party-client/delete-list?ids=${ids.join(',')}`,
   );
 }

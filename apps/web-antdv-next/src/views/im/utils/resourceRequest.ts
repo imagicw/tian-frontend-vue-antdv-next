@@ -1,10 +1,10 @@
 /** 可合并请求的固定资源 */
 export enum ResourceRequestKey {
+  CHANNEL_LIST = 'channelList', // 频道列表
   FACE_PACKS = 'facePacks', // 系统表情包
   FACE_USER_ITEMS = 'faceUserItems', // 用户表情
   FRIEND_LIST = 'friendList', // 好友列表
   GROUP_LIST = 'groupList', // 群列表
-  CHANNEL_LIST = 'channelList', // 频道列表
   GROUP_REQUEST_UNHANDLED = 'groupRequestUnhandled' // 未处理加群申请
 }
 
