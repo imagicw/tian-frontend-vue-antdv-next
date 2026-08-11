@@ -5,10 +5,12 @@ import type { DormApi } from '#/api/dorm';
 
 import {
   computed,
+  h,
   nextTick,
   onBeforeUnmount,
   onMounted,
   ref,
+  render as renderVue,
   watch,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -107,11 +109,15 @@ interface CalendarPointInfo {
   resource?: CalendarResource;
 }
 
-const CALENDAR_ROW_HEIGHT = 56;
+// 楼层与床位均使用 52px，保证左右时间轴严格对齐。
+const CALENDAR_ROW_HEIGHT = 52;
+const CALENDAR_FLOOR_ROW_HEIGHT = 52;
 const SLOT_WIDTH = 48;
 const DRAG_SCROLL_EDGE = 64;
 const DRAG_SCROLL_STEP = 18;
+const COMPACT_LAYOUT_MAX_WIDTH = 1180;
 const CALENDAR_STATUS_CODES = [1, 3, 4] as const;
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 const STATUS_META: Record<
   number,
@@ -136,29 +142,18 @@ const STATUS_META: Record<
     textColor: '#475569',
   },
   3: {
-    color: '#64748b',
+    color: '#059669',
     label: '已结算',
-    softColor: '#e2e8f0',
-    textColor: '#334155',
+    softColor: '#d1fae5',
+    textColor: '#047857',
   },
   4: {
-    color: '#475569',
+    color: '#7c3aed',
     label: '已分摊',
-    softColor: '#cbd5e1',
-    textColor: '#1e293b',
+    softColor: '#ede9fe',
+    textColor: '#6d28d9',
   },
 };
-
-const ROOM_EVENT_PALETTE = [
-  { softColor: '#dbeafe', textColor: '#1e3a8a' },
-  { softColor: '#cffafe', textColor: '#164e63' },
-  { softColor: '#d1fae5', textColor: '#064e3b' },
-  { softColor: '#fef3c7', textColor: '#78350f' },
-  { softColor: '#ffedd5', textColor: '#7c2d12' },
-  { softColor: '#ffe4e6', textColor: '#881337' },
-  { softColor: '#ede9fe', textColor: '#4c1d95' },
-  { softColor: '#fae8ff', textColor: '#701a75' },
-] as const;
 
 const route = useRoute();
 const router = useRouter();
@@ -179,9 +174,14 @@ const currentDate = ref(dayjs().startOf('month'));
 const collapsedFloors = ref<Set<number>>(new Set());
 const loading = ref(false);
 const refreshing = ref(false);
+const isCalendarEventDragging = ref(false);
 
+const schedulerPageRef = ref<HTMLElement | null>(null);
 const calendarRef = ref<HTMLElement | null>(null);
 let calendarInstance: EventCalendar | null = null;
+let schedulerResizeObserver: null | ResizeObserver = null;
+let calendarRowsResizeObserver: null | ResizeObserver = null;
+let calendarLayoutFrame: null | number = null;
 
 const detailOpen = ref(false);
 const selectedOrder = ref<DormApi.DormSubOrder>();
@@ -405,11 +405,6 @@ const visibleBedIds = computed(
   () => new Set(calendarResources.value.map((resource) => resource.id)),
 );
 
-function getRoomEventColor(roomId?: number, bedId?: number) {
-  const colorKey = Math.abs(Number(roomId ?? bedId ?? 0));
-  return ROOM_EVENT_PALETTE[colorKey % ROOM_EVENT_PALETTE.length]!;
-}
-
 const calendarEvents = computed<CalendarEvent[]>(() =>
   rawEvents.value
     .filter(
@@ -419,7 +414,7 @@ const calendarEvents = computed<CalendarEvent[]>(() =>
           order.status === selectedStatus.value),
     )
     .map((order) => {
-      const roomColor = getRoomEventColor(order.roomId, order.bedId);
+      const statusMeta = getStatusMeta(order.status);
       const start = order.startTime || currentDate.value.format('YYYY-MM-DD');
       const end =
         order.endTime || dayjs(start).add(1, 'day').format('YYYY-MM-DD');
@@ -438,8 +433,8 @@ const calendarEvents = computed<CalendarEvent[]>(() =>
         start,
         end,
         extendedProps: { subOrder: order },
-        backgroundColor: roomColor.softColor,
-        textColor: roomColor.textColor,
+        backgroundColor: statusMeta.softColor,
+        textColor: statusMeta.textColor,
         durationEditable: false,
         editable,
         startEditable: editable,
@@ -520,7 +515,6 @@ const occupancyRate = computed(() => {
 
 const statCards = computed(() => [
   {
-    accent: '#2563eb',
     icon: 'lucide:door-open',
     label: '房间总数',
     note: `${storeys.value.length} 个楼层`,
@@ -528,7 +522,6 @@ const statCards = computed(() => [
     value: allRooms.value.length,
   },
   {
-    accent: '#059669',
     icon: 'lucide:bed-single',
     label: '可用床位',
     note: `启用床位 ${totalCapacity.value}`,
@@ -536,7 +529,6 @@ const statCards = computed(() => [
     value: availableBedCount.value,
   },
   {
-    accent: '#d97706',
     icon: 'lucide:calendar-check-2',
     label: '本月排房',
     note: `${currentDate.value.format('M 月')}有效安排`,
@@ -544,7 +536,6 @@ const statCards = computed(() => [
     value: activeBookingCount.value,
   },
   {
-    accent: '#7c3aed',
     icon: 'lucide:gauge',
     label: '房间利用率',
     note: '按占用间夜估算',
@@ -604,6 +595,18 @@ function formatWeekday(value?: string) {
   ];
 }
 
+function formatCalendarDayHeader(date: Date) {
+  return `${date.getDate()}\n${WEEKDAY_LABELS[date.getDay()]}`;
+}
+
+function createCalendarIcon(icon: string, className: string) {
+  const host = document.createElement('span');
+  host.className = className;
+  host.setAttribute('aria-hidden', 'true');
+  renderVue(h(IconifyIcon, { icon, size: 14 }), host);
+  return host;
+}
+
 function renderResourceLabel({ resource }: any) {
   const props = resource.extendedProps ?? {};
   const wrapper = document.createElement('div');
@@ -618,35 +621,10 @@ function renderResourceLabel({ resource }: any) {
       `${props.collapsed ? '展开' : '收起'} ${props.floor}F 楼层`,
     );
 
-    const chevron = document.createElement('span');
-    chevron.className = [
+    const chevron = createCalendarIcon(
+      props.collapsed ? 'lucide:chevron-right' : 'lucide:chevron-down',
       'calendar-floor-toggle__chevron',
-      props.collapsed
-        ? 'calendar-floor-toggle__chevron--collapsed'
-        : 'calendar-floor-toggle__chevron--expanded',
-    ].join(' ');
-    chevron.setAttribute('aria-hidden', 'true');
-    const chevronIcon = document.createElementNS(
-      'http://www.w3.org/2000/svg',
-      'svg',
     );
-    chevronIcon.setAttribute('class', 'calendar-floor-toggle__icon');
-    chevronIcon.setAttribute('viewBox', '0 0 24 24');
-    chevronIcon.setAttribute('fill', 'none');
-    chevronIcon.setAttribute('stroke', 'currentColor');
-    chevronIcon.setAttribute('stroke-width', '2');
-    chevronIcon.setAttribute('stroke-linecap', 'round');
-    chevronIcon.setAttribute('stroke-linejoin', 'round');
-    const chevronPath = document.createElementNS(
-      'http://www.w3.org/2000/svg',
-      'path',
-    );
-    chevronPath.setAttribute(
-      'd',
-      props.collapsed ? 'm9 18 6-6-6-6' : 'm6 9 6 6 6-6',
-    );
-    chevronIcon.append(chevronPath);
-    chevron.append(chevronIcon);
     const title = document.createElement('strong');
     title.textContent = `${props.floor}F 楼层`;
     const meta = document.createElement('span');
@@ -656,6 +634,7 @@ function renderResourceLabel({ resource }: any) {
     toggle.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (isCalendarEventDragging.value) return;
       toggleFloor(Number(props.floor));
     });
     wrapper.append(toggle);
@@ -667,6 +646,7 @@ function renderResourceLabel({ resource }: any) {
   wrapper.className = [
     'calendar-resource-row',
     props.roomFirst ? 'calendar-resource-row--first' : '',
+    props.roomFirst ? '' : 'calendar-resource-row--continuation',
     props.roomLast ? 'calendar-resource-row--last' : '',
     Number(props.roomIndex ?? 0) % 2 === 0 ? 'calendar-resource-row--even' : '',
   ]
@@ -676,12 +656,9 @@ function renderResourceLabel({ resource }: any) {
     '--room-row-span',
     String(Math.max(1, Number(props.bedCount) || 1)),
   );
-  const roomCell = document.createElement('div');
-  roomCell.className = props.roomFirst
-    ? 'calendar-room-cell calendar-room-cell--primary'
-    : 'calendar-room-cell calendar-room-cell--continuation';
-
   if (props.roomFirst && room) {
+    const roomCell = document.createElement('div');
+    roomCell.className = 'calendar-room-cell calendar-room-cell--primary';
     const roomTop = document.createElement('div');
     roomTop.className = 'calendar-room-cell__top';
     const title = document.createElement('strong');
@@ -692,16 +669,15 @@ function renderResourceLabel({ resource }: any) {
     meta.className = 'calendar-room-cell__meta';
     meta.textContent = `${getRoomTypeLabel(room.roomType)} · ${room.beds.length} 个床位`;
     roomCell.append(roomTop, meta);
-  } else {
-    roomCell.setAttribute('aria-hidden', 'true');
+    wrapper.append(roomCell);
   }
-  wrapper.append(roomCell);
 
   const bedCell = document.createElement('div');
   bedCell.className = 'calendar-bed-slot';
-  const bedIcon = document.createElement('span');
-  bedIcon.className = 'calendar-bed-slot__icon';
-  bedIcon.textContent = '床';
+  const bedIcon = createCalendarIcon(
+    'lucide:bed-single',
+    'calendar-bed-slot__icon',
+  );
   const bedInfo = document.createElement('div');
   bedInfo.className = 'calendar-bed-slot__info';
   const bedTitle = document.createElement('strong');
@@ -709,11 +685,22 @@ function renderResourceLabel({ resource }: any) {
   const bedMeta = document.createElement('span');
   const bedAvailable = room?.status === 0 && bed?.status === 0;
   bedMeta.className = bedAvailable ? 'is-enabled' : 'is-disabled';
-  let bedStatusLabel = '已启用';
-  if (room?.status !== 0) bedStatusLabel = '房间停用';
-  else if (bed?.status !== 0) bedStatusLabel = '床位停用';
+  let bedStatusLabel = '可用';
+  let bedStatusDescription = '床位可用';
+  if (room?.status !== 0) {
+    bedStatusLabel = '停用';
+    bedStatusDescription = '房间已停用';
+  } else if (bed?.status !== 0) {
+    bedStatusLabel = '停用';
+    bedStatusDescription = '床位已停用';
+  }
   bedMeta.textContent = bedStatusLabel;
   bedInfo.append(bedTitle, bedMeta);
+  bedCell.setAttribute(
+    'aria-label',
+    `床位 ${bed?.bedCode || resource.title}，${bedStatusDescription}`,
+  );
+  bedCell.title = bedStatusDescription;
   bedCell.append(bedIcon, bedInfo);
   wrapper.append(bedCell);
   return { domNodes: [wrapper] };
@@ -761,10 +748,214 @@ function updateCalendarOptions() {
   calendarInstance.setOption('resources', calendarResources.value);
   calendarInstance.setOption('events', calendarEvents.value);
   calendarInstance.setOption('highlightedDates', [areaToday.value]);
+  scheduleCalendarLayoutSync();
 }
 
 function getCalendarScrollElement() {
-  return calendarRef.value?.querySelector<HTMLElement>('.ec-main') ?? null;
+  return calendarRef.value?.querySelector<HTMLElement>('.ec-body') ?? null;
+}
+
+function getCalendarDayWidth() {
+  return (
+    calendarRef.value
+      ?.querySelector<HTMLElement>('.ec-body .ec-days .ec-day')
+      ?.getBoundingClientRect().width || SLOT_WIDTH
+  );
+}
+
+function syncCalendarDayWidth() {
+  if (!calendarRef.value) return;
+  calendarRef.value.style.setProperty(
+    '--scheduler-day-width',
+    `${getCalendarDayWidth()}px`,
+  );
+}
+
+function syncRoomCardHeights() {
+  const rows = Array.from(
+    calendarRef.value?.querySelectorAll<HTMLElement>(
+      '.ec-sidebar .ec-resource',
+    ) ?? [],
+  );
+  const timelineRows = Array.from(
+    calendarRef.value?.querySelectorAll<HTMLElement>('.ec-body .ec-days') ?? [],
+  );
+  rows.forEach((row, rowIndex) => {
+    const timelineRow = timelineRows[rowIndex];
+    if (!timelineRow) return;
+    const isFloorRow = Boolean(row.querySelector('.calendar-floor-row'));
+    timelineRow.classList.toggle('calendar-timeline-row--floor', isFloorRow);
+    timelineRow.style.setProperty(
+      'flex-basis',
+      `${isFloorRow ? CALENDAR_FLOOR_ROW_HEIGHT : CALENDAR_ROW_HEIGHT}px`,
+      'important',
+    );
+    timelineRow.style.setProperty(
+      'min-height',
+      `${isFloorRow ? CALENDAR_FLOOR_ROW_HEIGHT : CALENDAR_ROW_HEIGHT}px`,
+      'important',
+    );
+    timelineRow.style.setProperty(
+      'max-height',
+      `${isFloorRow ? CALENDAR_FLOOR_ROW_HEIGHT : CALENDAR_ROW_HEIGHT}px`,
+      'important',
+    );
+    const timelineHeight = timelineRow.getBoundingClientRect().height;
+    row.style.setProperty(
+      'flex-basis',
+      `${timelineHeight}px`,
+      'important',
+    );
+    row.style.setProperty('min-height', `${timelineHeight}px`, 'important');
+    row.style.setProperty('max-height', `${timelineHeight}px`, 'important');
+  });
+  rows.forEach((row, rowIndex) => {
+    const resourceRow = row.querySelector<HTMLElement>(
+      '.calendar-resource-row--first',
+    );
+    const roomCell = resourceRow?.querySelector<HTMLElement>(
+      '.calendar-room-cell--primary',
+    );
+    if (!resourceRow || !roomCell) return;
+    const rowSpan = Math.max(
+      1,
+      Number(resourceRow.style.getPropertyValue('--room-row-span')) || 1,
+    );
+    const roomHeight = rows
+      .slice(rowIndex, rowIndex + rowSpan)
+      .reduce((height, currentRow) => {
+        return height + currentRow.getBoundingClientRect().height;
+      }, 0);
+    roomCell.style.height = `${roomHeight}px`;
+  });
+  syncCalendarDayWidth();
+  syncCalendarScrollRanges();
+}
+
+function syncSidebarScrollShadow() {
+  const scrollElement = getCalendarScrollElement();
+  calendarRef.value?.classList.toggle(
+    'ec-scheduler--sidebar-elevated',
+    Boolean(scrollElement && scrollElement.scrollLeft > 0.5),
+  );
+}
+
+function handleCalendarScroll() {
+  syncSidebarScrollShadow();
+}
+
+function syncCalendarScrollRanges() {
+  const scrollElement = getCalendarScrollElement();
+  const sidebarContent = calendarRef.value?.querySelector<HTMLElement>(
+    '.ec-sidebar .ec-content',
+  );
+  if (!scrollElement || !sidebarContent || !calendarRef.value) return;
+  const currentSpacer =
+    Number.parseFloat(
+      getComputedStyle(calendarRef.value).getPropertyValue(
+        '--scheduler-sidebar-scroll-spacer',
+      ),
+    ) || 0;
+  const timelineRange = scrollElement.scrollHeight - scrollElement.clientHeight;
+  const sidebarRange =
+    sidebarContent.scrollHeight - sidebarContent.clientHeight;
+  const nextSpacer = Math.max(0, currentSpacer + timelineRange - sidebarRange);
+  if (Math.abs(nextSpacer - currentSpacer) > 0.5) {
+    calendarRef.value.style.setProperty(
+      '--scheduler-sidebar-scroll-spacer',
+      `${nextSpacer}px`,
+    );
+  }
+  syncSidebarScrollShadow();
+}
+
+function observeCalendarRows() {
+  calendarRowsResizeObserver?.disconnect();
+  calendarRowsResizeObserver = new ResizeObserver(syncRoomCardHeights);
+  const rows =
+    calendarRef.value?.querySelectorAll<HTMLElement>(
+      '.ec-sidebar .ec-resource',
+    ) ?? [];
+  rows.forEach((row) => calendarRowsResizeObserver?.observe(row));
+  syncRoomCardHeights();
+}
+
+function scheduleCalendarLayoutSync() {
+  if (calendarLayoutFrame !== null) {
+    cancelAnimationFrame(calendarLayoutFrame);
+  }
+  calendarLayoutFrame = requestAnimationFrame(() => {
+    calendarLayoutFrame = requestAnimationFrame(() => {
+      calendarLayoutFrame = null;
+      observeCalendarRows();
+    });
+  });
+}
+
+function handleCalendarInteractionLayoutChange() {
+  // 拖动会由日历库重建资源标签节点；重新绑定观察器并恢复多人间跨行高度。
+  observeCalendarRows();
+  scheduleCalendarLayoutSync();
+}
+
+function handleCalendarEventDragStart() {
+  isCalendarEventDragging.value = true;
+  handleCalendarInteractionLayoutChange();
+}
+
+function handleCalendarEventDragStop() {
+  isCalendarEventDragging.value = false;
+  handleCalendarInteractionLayoutChange();
+}
+
+function revertCalendarChange(revert?: () => void) {
+  revert?.();
+  void nextTick().then(() => handleCalendarInteractionLayoutChange());
+}
+
+function scrollCalendarToFocusDate() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const scrollElement = getCalendarScrollElement();
+      if (!scrollElement) return;
+      syncCalendarDayWidth();
+      const isCurrentAreaMonth = currentDate.value.isSame(
+        areaCurrentMonth.value,
+        'month',
+      );
+      scrollElement.scrollLeft = isCurrentAreaMonth
+        ? Math.max(0, (pastDaysInWindow.value - 2) * getCalendarDayWidth())
+        : 0;
+    });
+  });
+}
+
+function handleCalendarWheel(event: WheelEvent) {
+  const calendarElement = calendarRef.value;
+  const target = event.target;
+  if (
+    !calendarElement ||
+    !(target instanceof Node) ||
+    !calendarElement.querySelector('.ec-sidebar')?.contains(target)
+  ) {
+    return;
+  }
+
+  const scrollElement = getCalendarScrollElement();
+  if (!scrollElement) return;
+
+  event.preventDefault();
+  scrollElement.scrollBy({
+    behavior: 'auto',
+    left: event.deltaX,
+    top: event.deltaY,
+  });
+}
+
+function syncCompactLayout(width = schedulerPageRef.value?.clientWidth ?? 0) {
+  if (width > 0 && width <= COMPACT_LAYOUT_MAX_WIDTH) {
+    pendingPanelCollapsed.value = true;
+  }
 }
 
 function applyAllocationWorkbench(data: DormApi.RoomAllocationWorkbench) {
@@ -920,7 +1111,7 @@ function initCalendar() {
         resources: calendarResources.value,
         events: calendarEvents.value,
         headerToolbar: { start: '', center: '', end: '' },
-        dayHeaderFormat: { day: 'numeric' },
+        dayHeaderFormat: formatCalendarDayHeader,
         height: 'auto',
         highlightedDates: [areaToday.value],
         slotDuration: { days: 1 },
@@ -930,7 +1121,11 @@ function initCalendar() {
         selectable: false,
         eventContent: renderEventContent,
         resourceLabelContent: renderResourceLabel,
+        eventDragStart: handleCalendarEventDragStart,
+        eventDragStop: handleCalendarEventDragStop,
         eventDrop: handleEventDrop,
+        eventResizeStart: handleCalendarInteractionLayoutChange,
+        eventResizeStop: handleCalendarInteractionLayoutChange,
         eventResize: handleEventResize,
         dateClick: handleSlotSelect,
         eventClick: handleEventClick,
@@ -938,10 +1133,8 @@ function initCalendar() {
       },
     },
   });
-  requestAnimationFrame(() => {
-    const scrollElement = getCalendarScrollElement();
-    if (scrollElement) scrollElement.scrollLeft = 0;
-  });
+  scheduleCalendarLayoutSync();
+  scrollCalendarToFocusDate();
 }
 
 async function handleAreaChange(value: unknown) {
@@ -985,10 +1178,7 @@ async function handleMonthChange(value: SingleDatePickerValue) {
   try {
     await fetchCalendarEvents();
     await nextTick();
-    requestAnimationFrame(() => {
-      const scrollElement = getCalendarScrollElement();
-      if (scrollElement) scrollElement.scrollLeft = 0;
-    });
+    scrollCalendarToFocusDate();
   } finally {
     loading.value = false;
   }
@@ -999,6 +1189,10 @@ async function changeMonth(offset: number) {
 }
 
 async function goToCurrentMonth() {
+  if (currentDate.value.isSame(areaCurrentMonth.value, 'month')) {
+    scrollCalendarToFocusDate();
+    return;
+  }
   await handleMonthChange(areaCurrentMonth.value);
 }
 
@@ -1027,7 +1221,7 @@ function confirmScheduleChange(title: string, content: string) {
 
 async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
   if (!canManageSchedule.value) {
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
 
@@ -1035,7 +1229,7 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
     | DormApi.DormSubOrder
     | undefined;
   if (!order) {
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
   if (order.status !== 1) {
@@ -1044,7 +1238,7 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
       warning = '该订单已结算或已分摊，不能再拖动调房';
     else if (order.status === 2) warning = '该订单已取消，排房记录仅供查看';
     message.warning(warning);
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
 
@@ -1055,12 +1249,12 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
     | undefined;
   if (resourceProps?.kind !== 'bed' || !targetBed || !targetRoom) {
     message.warning('只能将住宿人拖动到具体床位');
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
   if (targetBed.id === order.bedId) {
     message.info('已排房日期不能直接拖动，请使用日期变更流程');
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
   const confirmed = await confirmScheduleChange(
@@ -1071,7 +1265,7 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
   );
 
   if (!confirmed) {
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
 
@@ -1090,14 +1284,14 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
     message.success('调房完成');
     await fetchCalendarEvents();
   } catch {
-    revert?.();
+    revertCalendarChange(revert);
     await fetchCalendarEvents();
   }
 }
 
 async function handleEventResize({ event, revert }: any) {
   if (!canManageSchedule.value) {
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
 
@@ -1105,12 +1299,12 @@ async function handleEventResize({ event, revert }: any) {
     | DormApi.DormSubOrder
     | undefined;
   if (!order) {
-    revert?.();
+    revertCalendarChange(revert);
     return;
   }
 
   message.info('首次排房可调整审批日期；已排房记录请走日期变更流程');
-  revert?.();
+  revertCalendarChange(revert);
 }
 
 function handleSlotSelect({ date, resource, start }: any) {
@@ -1430,12 +1624,30 @@ async function submitTransfer() {
 watch([calendarResources, selectedStatus, areaToday], updateCalendarOptions);
 
 onMounted(async () => {
+  syncCompactLayout();
+  schedulerResizeObserver = new ResizeObserver(([entry]) => {
+    syncCompactLayout(entry?.contentRect.width);
+    scheduleCalendarLayoutSync();
+  });
+  if (schedulerPageRef.value) {
+    schedulerResizeObserver.observe(schedulerPageRef.value);
+  }
   await loadInitialData();
   await nextTick();
   initCalendar();
+  calendarRef.value?.addEventListener('scroll', handleCalendarScroll, true);
 });
 
 onBeforeUnmount(() => {
+  schedulerResizeObserver?.disconnect();
+  schedulerResizeObserver = null;
+  calendarRowsResizeObserver?.disconnect();
+  calendarRowsResizeObserver = null;
+  if (calendarLayoutFrame !== null) {
+    cancelAnimationFrame(calendarLayoutFrame);
+    calendarLayoutFrame = null;
+  }
+  calendarRef.value?.removeEventListener('scroll', handleCalendarScroll, true);
   calendarInstance?.destroy();
   calendarInstance = null;
 });
@@ -1737,10 +1949,10 @@ onBeforeUnmount(() => {
       </Spin>
     </Modal>
 
-    <div class="scheduler-page">
+    <div ref="schedulerPageRef" class="scheduler-page">
       <Card
-        class="scheduler-hero shrink-0 shadow-sm"
-        :body-style="{ padding: '18px 20px' }"
+        class="scheduler-hero shrink-0"
+        :body-style="{ padding: '16px 20px' }"
       >
         <div class="scheduler-hero__main">
           <div class="flex min-w-0 items-center gap-3">
@@ -1786,6 +1998,7 @@ onBeforeUnmount(() => {
           <div class="scheduler-hero__selectors">
             <Select
               :value="selectedAreaId"
+              aria-label="选择住宿区域"
               :options="
                 areas.map((area) => ({
                   label: area.areaName,
@@ -1804,6 +2017,7 @@ onBeforeUnmount(() => {
             </Select>
             <Select
               :value="selectedBuildId"
+              aria-label="选择宿舍楼栋"
               :options="
                 buildings.map((building) => ({
                   label: building.buildName,
@@ -1825,29 +2039,25 @@ onBeforeUnmount(() => {
         </div>
       </Card>
 
-      <div class="scheduler-stats shrink-0">
-        <Card
+      <section class="scheduler-overview shrink-0" aria-label="当前楼栋概览">
+        <div
           v-for="stat in statCards"
           :key="stat.label"
-          class="scheduler-stat shadow-sm"
-          :body-style="{ padding: '13px 16px' }"
-          :style="{ '--stat-accent': stat.accent }"
+          class="scheduler-overview__item"
         >
-          <div class="scheduler-stat__icon">
+          <div class="scheduler-overview__icon">
             <IconifyIcon :icon="stat.icon" :size="18" />
           </div>
           <div>
-            <div class="text-muted-foreground text-xs">{{ stat.label }}</div>
-            <div class="mt-1 flex items-baseline gap-1">
-              <strong class="text-foreground text-xl">{{ stat.value }}</strong>
-              <span class="text-muted-foreground text-xs">{{
-                stat.suffix
-              }}</span>
+            <div class="scheduler-overview__label">{{ stat.label }}</div>
+            <div class="scheduler-overview__value">
+              <strong>{{ stat.value }}</strong>
+              <span>{{ stat.suffix }}</span>
             </div>
           </div>
-          <span class="scheduler-stat__note">{{ stat.note }}</span>
-        </Card>
-      </div>
+          <span class="scheduler-overview__note">{{ stat.note }}</span>
+        </div>
+      </section>
 
       <Card
         class="scheduler-board min-h-0 flex-1 shadow-sm"
@@ -1862,7 +2072,12 @@ onBeforeUnmount(() => {
         <div class="scheduler-toolbar">
           <div class="scheduler-month-switcher">
             <Tooltip title="上一个月">
-              <Button type="text" class="month-arrow" @click="changeMonth(-1)">
+              <Button
+                type="text"
+                class="month-arrow"
+                aria-label="查看上一个月"
+                @click="changeMonth(-1)"
+              >
                 <IconifyIcon icon="lucide:chevron-left" :size="18" />
               </Button>
             </Tooltip>
@@ -1875,11 +2090,16 @@ onBeforeUnmount(() => {
               @change="handleMonthChange"
             />
             <Tooltip title="下一个月">
-              <Button type="text" class="month-arrow" @click="changeMonth(1)">
+              <Button
+                type="text"
+                class="month-arrow"
+                aria-label="查看下一个月"
+                @click="changeMonth(1)"
+              >
                 <IconifyIcon icon="lucide:chevron-right" :size="18" />
               </Button>
             </Tooltip>
-            <Button class="today-button" @click="goToCurrentMonth">本月</Button>
+            <Button class="today-button" @click="goToCurrentMonth">今天</Button>
           </div>
 
           <div class="scheduler-filters">
@@ -1898,6 +2118,7 @@ onBeforeUnmount(() => {
             </Input>
             <Select
               v-model:value="selectedFloorId"
+              aria-label="筛选楼层"
               allow-clear
               class="filter-select"
               placeholder="全部楼层"
@@ -1905,6 +2126,7 @@ onBeforeUnmount(() => {
             />
             <Select
               v-model:value="selectedStatus"
+              aria-label="筛选排房状态"
               allow-clear
               class="filter-select"
               placeholder="全部状态"
@@ -1914,6 +2136,8 @@ onBeforeUnmount(() => {
               v-if="canViewPendingOrders"
               type="primary"
               ghost
+              class="scheduler-pending-button"
+              aria-label="打开待分配住宿人面板"
               @click="openPendingOrders"
             >
               <IconifyIcon
@@ -1924,13 +2148,20 @@ onBeforeUnmount(() => {
                 "
                 :size="16"
               />
-              待分配住宿人
+              <span class="scheduler-pending-button__label">
+                待分配住宿人
+              </span>
               <span class="scheduler-pending-count">{{
                 pendingGuestCount
               }}</span>
             </Button>
             <Tooltip title="刷新排房数据">
-              <Button :loading="refreshing" @click="refreshCalendarEvents">
+              <Button
+                class="scheduler-refresh-button"
+                :loading="refreshing"
+                aria-label="刷新排房数据"
+                @click="refreshCalendarEvents"
+              >
                 <IconifyIcon icon="lucide:refresh-cw" :size="16" />
               </Button>
             </Tooltip>
@@ -1947,15 +2178,11 @@ onBeforeUnmount(() => {
               <i :style="{ backgroundColor: meta.color }"></i>
               {{ meta.label }}
             </span>
-            <span class="scheduler-room-color-hint">
-              <IconifyIcon icon="lucide:palette" :size="13" />
-              色条为状态 · 底色按房间
-            </span>
           </div>
           <div class="scheduler-hint">
             <IconifyIcon icon="lucide:mouse-pointer-2" :size="14" />
             <template v-if="canManageSchedule">
-              拖动卡片调房，点击空白床位安排入住；首次排房可独立调整人员日期
+              拖动卡片调房，点击空白床位安排入住
             </template>
             <template v-else>当前为只读模式，可点击排房卡片查看详情</template>
           </div>
@@ -1995,8 +2222,12 @@ onBeforeUnmount(() => {
               <div
                 ref="calendarRef"
                 class="ec-scheduler"
-                :class="{ 'ec-scheduler--hidden': !selectedBuildId }"
+                :class="{
+                  'ec-scheduler--event-dragging': isCalendarEventDragging,
+                  'ec-scheduler--hidden': !selectedBuildId,
+                }"
                 :style="{ '--past-days': pastDaysInWindow }"
+                @wheel="handleCalendarWheel"
               ></div>
             </Spin>
           </div>
@@ -2141,10 +2372,16 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
+  container-name: scheduler;
+  container-type: inline-size;
 }
 
 .scheduler-hero {
   overflow: hidden;
+  border-color: hsl(var(--border) / 70%);
+  background:
+    radial-gradient(circle at 0 0, hsl(var(--primary) / 8%), transparent 32%),
+    hsl(var(--card));
 }
 
 .scheduler-hero__main {
@@ -2212,6 +2449,19 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.scheduler-hero__selectors {
+  padding: 5px;
+  background: hsl(var(--background) / 68%);
+  border: 1px solid hsl(var(--border) / 72%);
+  border-radius: 10px;
+}
+
+.scheduler-hero__selectors :deep(.ant-select-selector) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 .scheduler-month-switcher {
   flex: none;
 }
@@ -2227,47 +2477,70 @@ onBeforeUnmount(() => {
   width: 190px;
 }
 
-.scheduler-stats {
+.scheduler-overview {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.scheduler-stat {
-  position: relative;
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--stat-accent) 18%, hsl(var(--border)));
-  border-top: 2px solid var(--stat-accent);
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border) / 72%);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
 }
 
-.scheduler-stat :deep(.ant-card-body) {
+.scheduler-overview__item {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 10px;
+  padding: 12px 16px;
 }
 
-.scheduler-stat__icon {
+.scheduler-overview__item + .scheduler-overview__item {
+  border-left: 1px solid hsl(var(--border) / 72%);
+}
+
+.scheduler-overview__icon {
   display: flex;
   width: 36px;
   height: 36px;
   flex: none;
   align-items: center;
   justify-content: center;
-  color: var(--stat-accent);
-  background: color-mix(in srgb, var(--stat-accent) 10%, transparent);
-  border-radius: 10px;
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 9%);
+  border-radius: 9px;
 }
 
-.scheduler-stat__note {
-  margin-left: auto;
+.scheduler-overview__label,
+.scheduler-overview__note,
+.scheduler-overview__value span {
   color: hsl(var(--muted-foreground));
   font-size: 11px;
+}
+
+.scheduler-overview__value {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.scheduler-overview__value strong {
+  color: hsl(var(--foreground));
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.scheduler-overview__note {
+  margin-left: auto;
   white-space: nowrap;
 }
 
 .scheduler-board {
   overflow: hidden;
   border-color: hsl(var(--border) / 75%);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 4%);
 }
 
 .scheduler-toolbar {
@@ -2277,7 +2550,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
-  padding: 11px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid hsl(var(--border));
 }
 
@@ -2314,7 +2587,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
-  padding: 8px 16px;
+  padding: 9px 16px;
   color: hsl(var(--muted-foreground));
   font-size: 12px;
   background: hsl(var(--muted) / 22%);
@@ -2332,14 +2605,6 @@ onBeforeUnmount(() => {
   height: 8px;
   border-radius: 50%;
   box-shadow: 0 0 0 3px color-mix(in srgb, currentcolor 7%, transparent);
-}
-
-.scheduler-room-color-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: hsl(var(--muted-foreground));
-  white-space: nowrap;
 }
 
 .scheduler-hint {
@@ -2364,6 +2629,12 @@ onBeforeUnmount(() => {
   line-height: 20px;
   background: hsl(var(--primary) / 10%);
   border-radius: 999px;
+}
+
+.scheduler-pending-button,
+.scheduler-refresh-button {
+  position: relative;
+  flex: none;
 }
 
 .scheduler-workbench {
@@ -2701,8 +2972,12 @@ onBeforeUnmount(() => {
   height: 100%;
   padding: 0;
   --scheduler-room-width: 208px;
+  --scheduler-row-height: 52px;
+  --scheduler-floor-row-height: 52px;
+  --scheduler-sidebar-scroll-spacer: 0px;
   --scheduler-sidebar-width: 324px;
   --scheduler-slot-width: 48px;
+  --scheduler-day-width: 48px;
   --ec-accent-color: hsl(var(--primary) / 35%);
   --ec-bg-color: hsl(var(--card));
   --ec-border-color: hsl(var(--border) / 58%);
@@ -2729,25 +3004,50 @@ onBeforeUnmount(() => {
 .ec-scheduler :deep(.ec-main) {
   max-height: 100%;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   border: 0;
-  scrollbar-color: hsl(var(--muted-foreground) / 30%) transparent;
-  scrollbar-width: thin;
 }
 
 .ec-scheduler :deep(.ec-sidebar) {
+  position: relative;
+  z-index: 4;
   width: var(--scheduler-sidebar-width);
   min-width: var(--scheduler-sidebar-width);
   color: hsl(var(--foreground));
   background: hsl(var(--background));
   border-inline-end: 1px solid hsl(var(--border) / 80%);
-  box-shadow: 5px 0 14px rgb(15 23 42 / 4%);
+  isolation: isolate;
+  transition: box-shadow 160ms ease;
 }
 
-.ec-scheduler :deep(.ec-body > .ec-sidebar) {
-  z-index: 6;
-  isolation: isolate;
-  background: hsl(var(--card));
+/* 仅在右侧时间轴滚动到固定列下方时显出分层阴影。 */
+.ec-scheduler :deep(.ec-container > .ec-sidebar::after) {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: -10px;
+  bottom: 0;
+  width: 10px;
+  background: linear-gradient(to right, rgb(15 23 42 / 14%), transparent);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.ec-scheduler.ec-scheduler--sidebar-elevated :deep(.ec-sidebar) {
+  box-shadow: 8px 0 18px -11px hsl(var(--foreground) / 34%);
+}
+
+.ec-scheduler.ec-scheduler--sidebar-elevated
+  :deep(.ec-container > .ec-sidebar::after) {
+  opacity: 1;
+}
+
+.ec-scheduler :deep(.ec-sidebar .ec-content::after) {
+  width: 1px;
+  flex: 0 0 var(--scheduler-sidebar-scroll-spacer);
+  content: '';
 }
 
 .ec-scheduler :deep(.ec-header .ec-sidebar) {
@@ -2765,7 +3065,7 @@ onBeforeUnmount(() => {
       transparent var(--scheduler-room-width)
     ),
     color-mix(in srgb, hsl(var(--muted)) 32%, hsl(var(--card)));
-  box-shadow: 6px 0 14px rgb(15 23 42 / 7%);
+  box-shadow: none;
 }
 
 .ec-scheduler :deep(.ec-header .ec-sidebar::after) {
@@ -2799,7 +3099,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 8px rgb(15 23 42 / 4%);
 }
 
-.ec-scheduler :deep(.ec-col-head) {
+.ec-scheduler :deep(.ec-day-head) {
   min-height: 48px;
   padding-top: 8px;
   font-size: 12px;
@@ -2807,47 +3107,29 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.ec-scheduler :deep(.ec-col-head time) {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 2px;
-  line-height: 15px;
-}
-
-.ec-scheduler :deep(.ec-col-head time::after) {
+.ec-scheduler :deep(.ec-day-head time) {
+  display: block;
   color: hsl(var(--muted-foreground));
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
-  line-height: 12px;
+  line-height: 16px;
+  white-space: pre-line;
 }
 
-.ec-scheduler :deep(.ec-col-head.ec-sun time::after) {
-  content: '周日';
+.ec-scheduler :deep(.ec-day-head.ec-sat),
+.ec-scheduler :deep(.ec-day-head.ec-sun) {
+  background: hsl(var(--muted) / 34%);
 }
 
-.ec-scheduler :deep(.ec-col-head.ec-mon time::after) {
-  content: '周一';
+.ec-scheduler :deep(.ec-day-head.ec-today) {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 10%);
+  box-shadow: inset 0 -2px 0 hsl(var(--primary) / 65%);
 }
 
-.ec-scheduler :deep(.ec-col-head.ec-tue time::after) {
-  content: '周二';
-}
-
-.ec-scheduler :deep(.ec-col-head.ec-wed time::after) {
-  content: '周三';
-}
-
-.ec-scheduler :deep(.ec-col-head.ec-thu time::after) {
-  content: '周四';
-}
-
-.ec-scheduler :deep(.ec-col-head.ec-fri time::after) {
-  content: '周五';
-}
-
-.ec-scheduler :deep(.ec-col-head.ec-sat time::after) {
-  content: '周六';
+.ec-scheduler :deep(.ec-day-head.ec-today time) {
+  color: hsl(var(--primary));
+  font-weight: 700;
 }
 
 .ec-scheduler :deep(.ec-day.ec-today:not(.ec-highlight)) {
@@ -2870,9 +3152,8 @@ onBeforeUnmount(() => {
   background: hsl(var(--muted) / 42%);
 }
 
-.ec-scheduler :deep(.ec-row-head) {
+.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource) {
   position: relative;
-  min-height: 56px;
   align-items: center;
   overflow: visible;
   padding: 0;
@@ -2882,11 +3163,40 @@ onBeforeUnmount(() => {
   text-align: left;
 }
 
-.ec-scheduler :deep(.ec-row-head > span) {
+.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource),
+.ec-scheduler :deep(.ec-timeline .ec-body .ec-days) {
+  min-height: var(--scheduler-row-height);
+  max-height: var(--scheduler-row-height);
+  flex: 0 0 var(--scheduler-row-height) !important;
+  box-sizing: border-box;
+}
+
+.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource:has(.calendar-floor-row)),
+.ec-scheduler
+  :deep(.ec-timeline .ec-body .ec-days.calendar-timeline-row--floor) {
+  min-height: var(--scheduler-floor-row-height);
+  max-height: var(--scheduler-floor-row-height);
+  flex: 0 0 var(--scheduler-floor-row-height) !important;
+}
+
+.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource:last-child),
+.ec-scheduler :deep(.ec-timeline .ec-body .ec-days:last-child) {
+  flex-grow: 0 !important;
+}
+
+/* 时间轴与资源列的滚动内容均以这条线收尾，避免末行底边缺失。 */
+.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-content),
+.ec-scheduler :deep(.ec-timeline .ec-body .ec-content) {
+  box-shadow: inset 0 -1px 0 hsl(var(--border) / 90%);
+}
+
+.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource > span) {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
   min-width: 0;
+  padding-top: 0;
 }
 
 .ec-scheduler :deep(.calendar-resource-row) {
@@ -2894,7 +3204,7 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: var(--scheduler-room-width) minmax(0, 1fr);
   width: 100%;
-  height: 56px;
+  height: 100%;
   min-width: 0;
   align-items: center;
   background: hsl(var(--card));
@@ -2902,6 +3212,12 @@ onBeforeUnmount(() => {
 
 .ec-scheduler :deep(.calendar-resource-row--even) {
   background: color-mix(in srgb, hsl(var(--muted)) 16%, hsl(var(--card)));
+}
+
+/* 首床位行承载跨行房间单元格，始终覆盖后续床位行的房间列。 */
+.ec-scheduler
+  :deep(.ec-sidebar .ec-resource:has(.calendar-resource-row--first)) {
+  z-index: 1;
 }
 
 .ec-scheduler :deep(.calendar-room-cell) {
@@ -2924,7 +3240,9 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   width: var(--scheduler-room-width);
-  height: calc(56px * var(--room-row-span));
+  /* 资源列表重建时立即保持跨床位高度，避免等待布局同步而闪现为单行。 */
+  height: calc(var(--scheduler-row-height) * var(--room-row-span));
+  border-bottom-color: hsl(var(--border) / 90%);
   box-shadow: inset 3px 0 0 hsl(var(--primary) / 55%);
 }
 
@@ -2959,12 +3277,6 @@ onBeforeUnmount(() => {
   line-height: 1;
 }
 
-.ec-scheduler :deep(.calendar-room-cell--continuation) {
-  padding: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
 .ec-scheduler :deep(.calendar-bed-slot) {
   display: flex;
   height: 100%;
@@ -2995,6 +3307,21 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid hsl(var(--primary) / 18%);
 }
 
+.ec-scheduler--event-dragging :deep(.calendar-floor-row) {
+  background: hsl(var(--muted) / 70%);
+  filter: grayscale(1);
+  opacity: 0.64;
+}
+
+.ec-scheduler--event-dragging :deep(.ec-body .calendar-timeline-row--floor) {
+  background: hsl(var(--muted) / 70%);
+}
+
+.ec-scheduler--event-dragging :deep(.calendar-floor-toggle) {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .ec-scheduler :deep(.calendar-floor-toggle) {
   display: flex;
   width: 100%;
@@ -3010,19 +3337,36 @@ onBeforeUnmount(() => {
 }
 
 .ec-scheduler :deep(.calendar-floor-toggle__chevron) {
-  display: inline-grid;
+  display: inline-flex;
   width: 24px;
   height: 24px;
   flex: none;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
   color: hsl(var(--primary));
   background: hsl(var(--primary) / 10%);
   border-radius: 7px;
 }
 
-.ec-scheduler :deep(.calendar-floor-toggle__icon) {
+.ec-scheduler :deep(.calendar-floor-toggle__chevron),
+.ec-scheduler :deep(.calendar-bed-slot__icon) {
+  align-self: center;
+}
+
+.ec-scheduler :deep(.calendar-floor-toggle__chevron > *),
+.ec-scheduler :deep(.calendar-bed-slot__icon > *) {
+  display: block;
   width: 14px;
   height: 14px;
+  margin: 0;
+  vertical-align: 0;
+}
+
+/* Iconify 的 SVG 在床位徽标中会保留基线偏移，显式上移至徽标几何中心。 */
+.ec-scheduler :deep(.calendar-floor-toggle__chevron > *),
+.ec-scheduler :deep(.calendar-bed-slot__icon > *) {
+  transform: translateY(-4px);
 }
 
 .ec-scheduler :deep(.calendar-floor-toggle strong) {
@@ -3038,21 +3382,6 @@ onBeforeUnmount(() => {
   color: hsl(var(--muted-foreground));
   font-size: 10px;
   white-space: nowrap;
-}
-
-.ec-scheduler :deep(.calendar-bed-slot__icon) {
-  display: inline-flex;
-  width: 26px;
-  height: 26px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  color: hsl(var(--primary));
-  font-size: 10px;
-  font-weight: 650;
-  background: hsl(var(--primary) / 8%);
-  border: 1px solid hsl(var(--primary) / 14%);
-  border-radius: 8px;
 }
 
 .ec-scheduler :deep(.calendar-bed-slot__info) {
@@ -3091,17 +3420,36 @@ onBeforeUnmount(() => {
   background: #94a3b8;
 }
 
+.ec-scheduler :deep(.calendar-bed-slot__icon) {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 8%);
+  border: 1px solid hsl(var(--primary) / 14%);
+  border-radius: 8px;
+}
+
 .ec-scheduler :deep(.ec-body) {
   position: relative;
 }
 
 .ec-scheduler :deep(.ec-body::after) {
+  display: none;
+}
+
+/* 历史日期遮罩属于完整滚动内容，而不是仅覆盖当前可视窗口。 */
+.ec-scheduler :deep(.ec-body .ec-content::after) {
   position: absolute;
-  z-index: 4;
+  z-index: 0;
   top: 0;
   bottom: 0;
-  left: var(--scheduler-sidebar-width);
-  width: calc(var(--past-days) * var(--scheduler-slot-width));
+  left: 0;
+  width: calc(var(--past-days) * var(--scheduler-day-width));
   background: rgb(148 163 184 / 7%);
   box-shadow: inset -1px 0 0 rgb(100 116 139 / 14%);
   content: '';
@@ -3110,10 +3458,9 @@ onBeforeUnmount(() => {
 
 .ec-scheduler :deep(.ec-event) {
   --calendar-event-status-color: #64748b;
+  top: calc((var(--scheduler-row-height) - 40px) / 2 - 1px);
   min-height: 40px;
-  align-self: center;
   block-size: 40px;
-  margin-block-end: 1px;
   overflow: hidden;
   border-color: color-mix(
     in srgb,
@@ -3144,11 +3491,11 @@ onBeforeUnmount(() => {
 }
 
 .ec-scheduler :deep(.calendar-event--status-3) {
-  --calendar-event-status-color: #64748b;
+  --calendar-event-status-color: #059669;
 }
 
 .ec-scheduler :deep(.calendar-event--status-4) {
-  --calendar-event-status-color: #475569;
+  --calendar-event-status-color: #7c3aed;
 }
 
 .ec-scheduler :deep(.ec-event:hover) {
@@ -3327,6 +3674,106 @@ onBeforeUnmount(() => {
   margin-top: 1px;
 }
 
+@container scheduler (max-width: 1120px) {
+  .scheduler-toolbar {
+    gap: 10px;
+  }
+
+  .scheduler-overview__item {
+    padding: 10px 12px;
+  }
+
+  .scheduler-overview__note,
+  .scheduler-pending-button__label {
+    display: none;
+  }
+
+  .room-search {
+    width: 160px;
+  }
+
+  .filter-select {
+    width: 104px;
+  }
+
+  .scheduler-filters {
+    flex: 1 1 470px;
+    flex-wrap: nowrap;
+  }
+
+  .scheduler-pending-button {
+    width: 38px;
+    padding-inline: 0;
+  }
+
+  .scheduler-pending-count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    color: white;
+    line-height: 17px;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 2px hsl(var(--card));
+  }
+}
+
+@container scheduler (max-width: 720px) {
+  .scheduler-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .scheduler-filters {
+    width: 100%;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .scheduler-hint {
+    margin-left: 0;
+  }
+}
+
+@container scheduler (max-width: 620px) {
+  .scheduler-legend {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@container scheduler (max-width: 760px) {
+  .scheduler-hero__main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .scheduler-hero__selectors {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .scheduler-hero__selectors .location-select {
+    min-width: 180px;
+    flex: 1;
+  }
+
+  .scheduler-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scheduler-overview__item:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .scheduler-overview__item:nth-child(n + 3) {
+    border-top: 1px solid hsl(var(--border) / 72%);
+  }
+}
+
 @media (max-width: 1080px) {
   .scheduler-toolbar,
   .scheduler-legend {
@@ -3366,15 +3813,15 @@ onBeforeUnmount(() => {
     width: 118px;
   }
 
-  .scheduler-stats {
+  .scheduler-overview {
     grid-template-columns: repeat(4, minmax(112px, 1fr));
   }
 
-  .scheduler-stat :deep(.ant-card-body) {
-    padding: 10px 12px !important;
+  .scheduler-overview__item {
+    padding: 10px 12px;
   }
 
-  .scheduler-stat__note {
+  .scheduler-overview__note {
     display: none;
   }
 
@@ -3394,8 +3841,16 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
   }
 
-  .scheduler-stats {
+  .scheduler-overview {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scheduler-overview__item:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .scheduler-overview__item:nth-child(n + 3) {
+    border-top: 1px solid hsl(var(--border) / 72%);
   }
 
   .location-select,
@@ -3410,8 +3865,13 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 460px) {
-  .scheduler-stats {
+  .scheduler-overview {
     grid-template-columns: 1fr;
+  }
+
+  .scheduler-overview__item + .scheduler-overview__item {
+    border-top: 1px solid hsl(var(--border) / 72%);
+    border-left: 0;
   }
 }
 </style>
