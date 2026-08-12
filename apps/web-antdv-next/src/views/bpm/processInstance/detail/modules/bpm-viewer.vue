@@ -44,6 +44,7 @@ watch(
   (value) => {
     view.value.bpmnXml = value || '';
   },
+  { immediate: true },
 );
 </script>
 
