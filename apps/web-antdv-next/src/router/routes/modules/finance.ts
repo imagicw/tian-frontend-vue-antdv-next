@@ -5,8 +5,7 @@ const routes: RouteRecordRaw[] = [
     path: '/finance',
     name: 'Finance',
     meta: {
-      icon: 'ant-design:fund-outlined',
-      order: 50,
+      hideInMenu: true,
       title: '财务管理',
     },
     children: [
@@ -15,7 +14,7 @@ const routes: RouteRecordRaw[] = [
         name: 'FinanceEcSkuMapping',
         component: () => import('#/views/finance/sku-mapping/index.vue'),
         meta: {
-          icon: 'ant-design:swap-outlined',
+          hideInMenu: true,
           title: 'SKU 映射',
           access: ['finance:crossborder:sku-mapping:query'],
         },
@@ -25,7 +24,7 @@ const routes: RouteRecordRaw[] = [
         name: 'FinanceEcInventory',
         component: () => import('#/views/finance/inventory/index.vue'),
         meta: {
-          icon: 'ant-design:inbox-outlined',
+          hideInMenu: true,
           title: '库存管理',
           access: ['finance:crossborder:inventory:query'],
         },
@@ -35,7 +34,7 @@ const routes: RouteRecordRaw[] = [
         name: 'FinanceEcOrder',
         component: () => import('#/views/finance/order/index.vue'),
         meta: {
-          icon: 'ant-design:import-outlined',
+          hideInMenu: true,
           title: '订单导入',
           access: ['finance:crossborder:order-import:query'],
         },
@@ -45,7 +44,7 @@ const routes: RouteRecordRaw[] = [
         name: 'FinanceEcReport',
         component: () => import('#/views/finance/report/index.vue'),
         meta: {
-          icon: 'ant-design:file-excel-outlined',
+          hideInMenu: true,
           title: '财务报表',
           access: ['finance:crossborder:order-import:query'],
         },
