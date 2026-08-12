@@ -21,6 +21,7 @@ import {
   Empty,
   Form,
   FormItem,
+  Image,
   Input,
   message,
   Popconfirm,
@@ -38,6 +39,7 @@ import { getProcessDefinition } from '#/api/bpm/definition';
 import { getApprovalDetail as getApprovalDetailApi } from '#/api/bpm/processInstance';
 import {
   createDormApply,
+  getAreaInfo,
   getAreaSimpleList,
   getBuildInfo,
   getBuildSimpleList,
@@ -75,6 +77,7 @@ const simpleJson = ref<string>();
 const activityNodes = ref<BpmProcessInstanceApi.ApprovalNodeInfo[]>([]);
 const startUserSelectAssignees = ref<Record<string, number[]>>({});
 const buildingAttention = ref<string>();
+const areaInfo = ref<DormApi.DormArea>();
 
 function createRoom(roomType = 1): DormApi.CheckInInfo {
   return {
@@ -114,6 +117,10 @@ const buildingOptions = computed(() =>
     value: building.id,
   })),
 );
+async function loadAreaInfo(areaId?: number) {
+  areaInfo.value = areaId ? await getAreaInfo(areaId) : undefined;
+}
+
 async function loadBuildings(areaId?: number) {
   formData.buildId = undefined;
   buildings.value = [];
@@ -121,10 +128,14 @@ async function loadBuildings(areaId?: number) {
   buildingAttention.value = undefined;
   if (!areaId) return;
   buildings.value = await getBuildSimpleList(areaId);
-  if (buildings.value.length === 1) {
+  if (buildings.value.length > 0) {
     formData.buildId = buildings.value[0]?.id;
     await onBuildingChange();
   }
+}
+
+async function onAreaChange(areaId?: number) {
+  await Promise.all([loadAreaInfo(areaId), loadBuildings(areaId)]);
 }
 
 async function loadBuildingAttention(buildId?: number) {
@@ -200,7 +211,7 @@ async function refreshApprovalPrediction() {
   const data = await getApprovalDetailApi({
     activityId: BpmNodeIdEnum.START_USER_NODE_ID,
     processDefinitionId: processDefinition.value.id,
-    processVariablesStr: JSON.stringify({ buildId: formData.buildId }),
+    processVariables: JSON.stringify({ buildId: formData.buildId }),
   });
   activityNodes.value = data?.activityNodes ?? [];
   const selectableNodeIds = activityNodes.value
@@ -325,7 +336,7 @@ onMounted(init);
                           placeholder="请选择申请区域"
                           show-search
                           option-filter-prop="label"
-                          @change="loadBuildings"
+                          @change="onAreaChange"
                         />
                       </FormItem>
                     </Col>
@@ -533,6 +544,49 @@ onMounted(init);
               </Col>
               <Col :xs="24" :lg="8">
                 <div class="side-stack">
+                  <Card v-if="formData.areaId" class="area-card" size="small">
+                    <template #title>
+                      <div class="section-title">
+                        <span class="section-title__icon is-blue">
+                          <IconifyIcon icon="lucide:map" :size="16" />
+                        </span>
+                        <strong>
+                          {{
+                            areaInfo?.regionName
+                              ? `[${areaInfo.regionName}] ${areaInfo.areaName}`
+                              : (areaInfo?.areaName ?? '区域信息')
+                          }}
+                        </strong>
+                      </div>
+                    </template>
+                    <div class="area-cover">
+                      <Image.PreviewGroup v-if="areaInfo?.images?.length">
+                        <Image
+                          :alt="`${areaInfo.areaName}区域照片`"
+                          class="area-cover__image"
+                          :src="areaInfo.images[0]"
+                        />
+                        <Image
+                          v-for="image in areaInfo.images.slice(1)"
+                          :key="image"
+                          class="hidden"
+                          :src="image"
+                        />
+                      </Image.PreviewGroup>
+                      <div v-else class="area-cover__placeholder">
+                        <IconifyIcon icon="lucide:image" :size="20" />
+                      </div>
+                    </div>
+                    <p v-if="areaInfo?.position" class="area-address">
+                      地址：{{ areaInfo.position }}
+                    </p>
+                    <!-- eslint-disable-next-line vue/no-v-html -->
+                    <div
+                      v-if="areaInfo?.attention"
+                      class="notice-text"
+                      v-html="areaInfo.attention"
+                    ></div>
+                  </Card>
                   <Card class="notice-card" size="small">
                     <template #title>
                       <div class="section-title">
@@ -756,6 +810,48 @@ onMounted(init);
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.area-card {
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+}
+
+.area-card :deep(.ant-card-body) {
+  padding: 0 16px 14px;
+}
+
+.area-cover {
+  position: relative;
+  height: 140px;
+  margin: 0 -16px 12px;
+  overflow: hidden;
+  background: hsl(var(--muted));
+}
+
+.area-cover :deep(.ant-image) {
+  width: 100%;
+  height: 100%;
+}
+
+.area-cover :deep(.ant-image-img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.area-cover__placeholder {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--muted-foreground));
+}
+
+.area-address {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
 }
 
 .notice-card {
