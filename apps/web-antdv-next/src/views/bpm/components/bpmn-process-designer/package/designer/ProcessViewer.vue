@@ -8,6 +8,7 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
+  shallowRef,
   watch,
 } from 'vue';
 
@@ -36,7 +37,8 @@ const props = defineProps({
 });
 
 const processCanvas = ref();
-const bpmnViewer = ref<any | BpmnViewer>(null);
+// bpmn-js 管理自己的可变状态，避免 Vue 深度代理第三方实例。
+const bpmnViewer = shallowRef<any | BpmnViewer>(null);
 const customDefs = ref();
 const defaultZoom = ref(1); // 默认缩放比例
 const isLoading = ref(false); // 是否加载中
@@ -389,7 +391,6 @@ watch(
   (newXml) => {
     importXML(newXml || '');
   },
-  { immediate: true },
 );
 
 watch(
@@ -400,7 +401,7 @@ watch(
   { immediate: true },
 );
 
-/** mounted：初始化 */
+/** 画布容器挂载后再执行首次导入。 */
 onMounted(() => {
   importXML(props.xml || '');
   setProcessStatus(props.view);

@@ -9,6 +9,7 @@ import { IconifyIcon } from '@vben/icons';
 
 import FormCreate from '@form-create/antdv-next';
 import {
+  AutoComplete,
   Form,
   FormItem,
   Input,
@@ -20,6 +21,11 @@ import {
 
 import { getForm } from '#/api/bpm/form';
 import { setConfAndFields2 } from '#/components/form-create';
+import { isComponentRegistered } from '#/utils';
+import {
+  businessFormViewOptions,
+  resolveBusinessFormViewPath,
+} from '#/utils/business-form';
 
 type FormCreateRule = {
   [key: string]: unknown;
@@ -51,6 +57,16 @@ const rules: Record<string, any[]> = {
   ],
   formCustomViewPath: [
     { required: true, message: '表单查看地址不能为空', trigger: 'blur' },
+    {
+      async validator(_rule: unknown, value: string) {
+        if (!value) return;
+        const resolvedPath = resolveBusinessFormViewPath(value);
+        if (!isComponentRegistered(resolvedPath)) {
+          throw new Error(`找不到业务表单查看组件：${resolvedPath}`);
+        }
+      },
+      trigger: 'blur',
+    },
   ],
 };
 
@@ -144,8 +160,10 @@ defineExpose({ validate });
       class="mb-5"
     >
       <div class="flex items-center">
-        <Input
+        <AutoComplete
           v-model:value="modelData.formCustomViewPath"
+          :options="businessFormViewOptions"
+          class="w-full"
           placeholder="请输入表单查看的组件地址"
         />
         <Tooltip
