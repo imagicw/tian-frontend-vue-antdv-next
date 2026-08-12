@@ -11,7 +11,6 @@ import {
   onMounted,
   ref,
   render as renderVue,
-  watch,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -19,9 +18,6 @@ import { useAccess } from '@vben/access';
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
 
-import EventCalendar from '@event-calendar/core';
-import Interaction from '@event-calendar/interaction';
-import ResourceTimeline from '@event-calendar/resource-timeline';
 import {
   Button,
   Card,
@@ -44,6 +40,8 @@ import timezone from 'dayjs/plugin/timezone.js';
 import utc from 'dayjs/plugin/utc.js';
 
 import {
+  adjustPendingGuestPeriod,
+  allocateDormBeds,
   changeDormStayPeriod,
   getAreaSimpleList,
   getBuildInfo,
@@ -52,69 +50,69 @@ import {
   getRoomAllocationWorkbench,
   transferDormBed,
 } from '#/api/dorm';
-
 import {
-  getSingleDatePickerValue,
-  type SingleDatePickerValue,
-} from '../utils/date-picker';
-import AllocationDrawer from './modules/allocation-drawer.vue';
+  type SchedulerEvent as CalendarEventBase,
+  type SchedulerResource as CalendarResourceBase,
+  ResourceTimelineScheduler,
+  type SchedulerPointInfo,
+} from '#/components/resource-scheduler';
 
-import '@event-calendar/core/index.css';
+import { getSingleDatePickerValue, type SingleDatePickerValue } from '../utils/date-picker';
+import AllocationDrawer from './modules/allocation-drawer.vue';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-interface CalendarResource {
-  id: string;
-  title: string;
-  extendedProps?: {
-    bed?: DormApi.RoomAllocationBed;
-    bedCount?: number;
-    bedIndex?: number;
-    collapsed?: boolean;
-    floor?: number;
-    kind: 'bed' | 'floor' | 'room';
-    room?: DormApi.DormRoomInfo | DormApi.RoomAllocationRoom;
-    roomCount?: number;
-    roomFirst?: boolean;
-    roomIndex?: number;
-    roomLast?: boolean;
-  };
+interface CalendarResourceProps {
+  bed?: DormApi.RoomAllocationBed;
+  bedCount?: number;
+  bedIndex?: number;
+  collapsed?: boolean;
+  floor?: number;
+  kind: 'bed' | 'floor' | 'room';
+  room?: DormApi.DormRoomInfo | DormApi.RoomAllocationRoom;
+  roomCount?: number;
+  roomFirst?: boolean;
+  roomIndex?: number;
+  roomLast?: boolean;
 }
 
-interface CalendarEvent {
-  backgroundColor: string;
-  classNames: string[];
-  durationEditable: boolean;
-  editable: boolean;
-  end: string;
-  extendedProps: { subOrder: DormApi.DormSubOrder };
-  id: string;
-  resourceId: string;
-  start: string;
-  startEditable: boolean;
-  textColor: string;
-  title: string;
+type CalendarResource = CalendarResourceBase & { extendedProps?: CalendarResourceProps };
+
+interface CalendarEventProps {
+  dropPreview?: PendingGuestDropPreview;
+  pendingDraft?: PendingAllocationDraft;
+  subOrder?: DormApi.DormSubOrder;
 }
+
+type CalendarEvent = CalendarEventBase & { extendedProps: CalendarEventProps };
 
 interface AllocationDrawerExpose {
   openAllocation: (
     guest: DormApi.PendingAllocationGuest,
-    preset?: { bedId?: number; roomId?: number; startDate?: string },
+    preset?: { bedId?: number; roomId?: number; startDate?: string }
   ) => Promise<void>;
 }
 
-interface CalendarPointInfo {
-  date: Date;
-  resource?: CalendarResource;
+type CalendarPointInfo = SchedulerPointInfo & { resource?: CalendarResource };
+
+interface PendingGuestDropPreview {
+  bedId: number;
+  end: string;
+  isAvailable: boolean;
+  roomId: number;
+  roomName: string;
+  start: string;
 }
 
-// 楼层与床位均使用 52px，保证左右时间轴严格对齐。
-const CALENDAR_ROW_HEIGHT = 52;
-const CALENDAR_FLOOR_ROW_HEIGHT = 52;
-const SLOT_WIDTH = 48;
-const DRAG_SCROLL_EDGE = 64;
-const DRAG_SCROLL_STEP = 18;
+interface PendingAllocationDraft {
+  bedId: number;
+  endDate: string;
+  guest: DormApi.PendingAllocationGuest;
+  roomId: number;
+  startDate: string;
+}
+
 const COMPACT_LAYOUT_MAX_WIDTH = 1180;
 const CALENDAR_STATUS_CODES = [1, 3, 4] as const;
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -177,11 +175,8 @@ const refreshing = ref(false);
 const isCalendarEventDragging = ref(false);
 
 const schedulerPageRef = ref<HTMLElement | null>(null);
-const calendarRef = ref<HTMLElement | null>(null);
-let calendarInstance: EventCalendar | null = null;
+const schedulerRef = ref<InstanceType<typeof ResourceTimelineScheduler>>();
 let schedulerResizeObserver: null | ResizeObserver = null;
-let calendarRowsResizeObserver: null | ResizeObserver = null;
-let calendarLayoutFrame: null | number = null;
 
 const detailOpen = ref(false);
 const selectedOrder = ref<DormApi.DormSubOrder>();
@@ -192,6 +187,11 @@ const allocationPresetBedId = ref<number>();
 const allocationPresetRoomId = ref<number>();
 const allocationPresetStartDate = ref<string>();
 const draggingGuest = ref<DormApi.PendingAllocationGuest>();
+const pendingGuestDropPreview = ref<PendingGuestDropPreview>();
+const pendingAllocationDrafts = ref<PendingAllocationDraft[]>([]);
+const draftReasonDialogOpen = ref(false);
+const draftReasons = ref<Record<number, string>>({});
+const savingDrafts = ref(false);
 const pendingGuestKeyword = ref('');
 const pendingPanelCollapsed = ref(false);
 const transferOpen = ref(false);
@@ -206,21 +206,24 @@ const periodChangeOpen = ref(false);
 const periodChangeSubmitting = ref(false);
 const periodChangeEndDate = ref('');
 const periodChangeReason = ref('');
+const dragPeriodChangeOpen = ref(false);
+const dragPeriodChangeSubmitting = ref(false);
+const dragPeriodChangeOrder = ref<DormApi.DormSubOrder>();
+const dragPeriodChangeStart = ref('');
+const dragPeriodChangeEnd = ref('');
+const dragPeriodChangeReason = ref('');
+let dragPeriodChangeRevert: (() => void) | undefined;
 const TextArea = Input.TextArea;
 
-const canManageSchedule = computed(() =>
-  hasAccessByCodes(['dorm:room:update']),
-);
+const canManageSchedule = computed(() => hasAccessByCodes(['dorm:room:update']));
 const canViewPendingOrders = computed(
-  () => canManageSchedule.value && hasAccessByCodes(['dorm:order:query']),
+  () => canManageSchedule.value && hasAccessByCodes(['dorm:order:query'])
 );
 
-const currentArea = computed(() =>
-  areas.value.find((area) => area.id === selectedAreaId.value),
-);
+const currentArea = computed(() => areas.value.find((area) => area.id === selectedAreaId.value));
 
 const currentBuilding = computed(() =>
-  buildings.value.find((building) => building.id === selectedBuildId.value),
+  buildings.value.find((building) => building.id === selectedBuildId.value)
 );
 
 const storeys = computed(() => selectedBuildInfo.value?.storeyBaseInfo ?? []);
@@ -231,41 +234,36 @@ const allRooms = computed(() =>
       ...room,
       floor: storey.floor,
       storeyId: storey.id,
-    })),
-  ),
+    }))
+  )
 );
 
 const dateRange = computed(() => ({
   end: currentDate.value.add(1, 'month').startOf('month').format('YYYY-MM-DD'),
   start: currentDate.value.startOf('month').format('YYYY-MM-DD'),
 }));
+const calendarViewDate = computed(() => currentDate.value.startOf('month').toDate());
+const calendarDurationDays = computed(() => currentDate.value.daysInMonth());
 const areaTimezone = computed(
-  () =>
-    allocationWorkbench.value?.areaTimezone ||
-    currentArea.value?.timeZone ||
-    dayjs.tz.guess(),
+  () => allocationWorkbench.value?.areaTimezone || currentArea.value?.timeZone || dayjs.tz.guess()
 );
-const areaToday = computed(() =>
-  dayjs().tz(areaTimezone.value).format('YYYY-MM-DD'),
-);
-const areaCurrentMonth = computed(() =>
-  dayjs(`${areaToday.value.slice(0, 7)}-01`),
-);
+const areaToday = computed(() => dayjs().tz(areaTimezone.value).format('YYYY-MM-DD'));
+const areaCurrentMonth = computed(() => dayjs(`${areaToday.value.slice(0, 7)}-01`));
 const pastDaysInWindow = computed(() =>
   Math.max(
     0,
     Math.min(
       currentDate.value.daysInMonth(),
-      dayjs(areaToday.value).diff(currentDate.value.startOf('month'), 'day'),
-    ),
-  ),
+      dayjs(areaToday.value).diff(currentDate.value.startOf('month'), 'day')
+    )
+  )
 );
 
 const floorOptions = computed(() =>
   storeys.value.map((storey) => ({
     label: `${storey.floor} 层 · ${storey.roomBaseInfo?.length ?? 0} 间`,
     value: storey.id,
-  })),
+  }))
 );
 
 const statusOptions = CALENDAR_STATUS_CODES.map((status) => ({
@@ -276,23 +274,30 @@ const calendarLegend = CALENDAR_STATUS_CODES.map((status) => ({
   ...STATUS_META[status]!,
   status,
 }));
-const pendingGuestCount = computed(
-  () => allocationWorkbench.value?.pendingGuests.length ?? 0,
+const pendingGuestCount = computed(() => allocationWorkbench.value?.pendingGuests.length ?? 0);
+const pendingDraftCount = computed(() => pendingAllocationDrafts.value.length);
+const conflictedDrafts = computed(() =>
+  pendingAllocationDrafts.value.filter((draft) => isDraftConflicted(draft))
+);
+const hasBlockingConflicts = computed(() => conflictedDrafts.value.length > 0);
+const unassignedPendingGuestCount = computed(
+  () => visiblePendingGuests.value.filter((guest) => !getPendingDraft(guest.id)).length
 );
 const visiblePendingGuests = computed(() => {
   const keyword = pendingGuestKeyword.value.trim().toLocaleLowerCase();
   const guests = allocationWorkbench.value?.pendingGuests ?? [];
-  if (!keyword) return guests;
-  return guests.filter((guest) =>
-    [guest.userName, guest.orderSerial, guest.requestGroupNo]
-      .filter((value) => value !== undefined && value !== null)
-      .some((value) => String(value).toLocaleLowerCase().includes(keyword)),
+  return guests.filter(
+    (guest) =>
+      !keyword ||
+      [guest.userName, guest.orderSerial, guest.requestGroupNo]
+        .filter((value) => value !== undefined && value !== null)
+        .some((value) => String(value).toLocaleLowerCase().includes(keyword))
   );
 });
 
 const transferRooms = computed(() => transferWorkbench.value?.rooms ?? []);
 const selectedTransferRoom = computed(() =>
-  transferRooms.value.find((room) => room.id === transferRoomId.value),
+  transferRooms.value.find((room) => room.id === transferRoomId.value)
 );
 const transferRoomOptions = computed(() =>
   transferRooms.value.map((room) => ({
@@ -301,17 +306,14 @@ const transferRoomOptions = computed(() =>
       room.status === 0 ? '' : ' · 房间停用'
     }`,
     value: room.id,
-  })),
+  }))
 );
 const transferBedOptions = computed(() =>
   (selectedTransferRoom.value?.beds ?? []).map((bed) => ({
     disabled: bed.status !== 0 || bed.assignments.length > 0,
-    label:
-      bed.assignments.length > 0
-        ? `${bed.bedCode} · 已占用`
-        : `${bed.bedCode} · 可用`,
+    label: bed.assignments.length > 0 ? `${bed.bedCode} · 已占用` : `${bed.bedCode} · 可用`,
     value: bed.id,
-  })),
+  }))
 );
 const canSubmitTransfer = computed(
   () =>
@@ -319,23 +321,42 @@ const canSubmitTransfer = computed(
     transferDate.value &&
     transferRoomId.value &&
     transferBedId.value &&
-    transferReason.value.trim(),
+    transferReason.value.trim()
 );
 const canSubmitPeriodChange = computed(
   () =>
     selectedOrder.value &&
     periodChangeEndDate.value &&
-    dayjs(
-      selectedOrder.value.plannedStartTime || selectedOrder.value.startTime,
-    ).isBefore(dayjs(periodChangeEndDate.value)) &&
-    periodChangeReason.value.trim(),
+    dayjs(selectedOrder.value.plannedStartTime || selectedOrder.value.startTime).isBefore(
+      dayjs(periodChangeEndDate.value)
+    ) &&
+    periodChangeReason.value.trim()
+);
+const dragPeriodChangeConflicts = computed(() => {
+  const order = dragPeriodChangeOrder.value;
+  if (!order || !dragPeriodChangeStart.value || !dragPeriodChangeEnd.value) return [];
+  const bed = findRoomAndBedById(order.bedId)?.bed;
+  if (!bed) return [];
+  return getBedAssignmentConflicts(
+    bed,
+    dragPeriodChangeStart.value,
+    dragPeriodChangeEnd.value,
+    order.id
+  );
+});
+const canSubmitDragPeriodChange = computed(
+  () =>
+    dragPeriodChangeOrder.value &&
+    dragPeriodChangeStart.value &&
+    dragPeriodChangeEnd.value &&
+    dayjs(dragPeriodChangeStart.value).isBefore(dayjs(dragPeriodChangeEnd.value), 'day') &&
+    dragPeriodChangeReason.value.trim() &&
+    dragPeriodChangeConflicts.value.length === 0
 );
 
 const calendarResources = computed<CalendarResource[]>(() => {
   const keyword = roomKeyword.value.trim().toLocaleLowerCase();
-  const selectedFloor = storeys.value.find(
-    (storey) => storey.id === selectedFloorId.value,
-  )?.floor;
+  const selectedFloor = storeys.value.find((storey) => storey.id === selectedFloorId.value)?.floor;
   const roomsByFloor = new Map<number, DormApi.RoomAllocationRoom[]>();
   for (const room of allocationWorkbench.value?.rooms ?? []) {
     if (selectedFloor !== undefined && room.floor !== selectedFloor) continue;
@@ -354,22 +375,19 @@ const calendarResources = computed<CalendarResource[]>(() => {
 
   const resources: CalendarResource[] = [];
   for (const [floor, floorRooms] of [...roomsByFloor.entries()].toSorted(
-    ([left], [right]) => left - right,
+    ([left], [right]) => left - right
   )) {
     const sortedRooms = floorRooms.toSorted((left, right) =>
       String(left.roomCode || left.roomAlias || '').localeCompare(
-        String(right.roomCode || right.roomAlias || ''),
-      ),
+        String(right.roomCode || right.roomAlias || '')
+      )
     );
     const collapsed = collapsedFloors.value.has(floor);
     resources.push({
       id: `floor-${floor}`,
       title: `${floor}F 楼层`,
       extendedProps: {
-        bedCount: sortedRooms.reduce(
-          (total, room) => total + room.beds.length,
-          0,
-        ),
+        bedCount: sortedRooms.reduce((total, room) => total + room.beds.length, 0),
         collapsed,
         floor,
         kind: 'floor',
@@ -394,37 +412,33 @@ const calendarResources = computed<CalendarResource[]>(() => {
             roomIndex,
             roomLast: bedIndex === room.beds.length - 1,
           },
-        })),
-      ),
+        }))
+      )
     );
   }
   return resources;
 });
 
 const visibleBedIds = computed(
-  () => new Set(calendarResources.value.map((resource) => resource.id)),
+  () => new Set(calendarResources.value.map((resource) => resource.id))
 );
 
-const calendarEvents = computed<CalendarEvent[]>(() =>
-  rawEvents.value
+const calendarEvents = computed<CalendarEvent[]>(() => {
+  const events: CalendarEvent[] = rawEvents.value
     .filter(
       (order) =>
         visibleBedIds.value.has(`bed-${order.bedId}`) &&
-        (selectedStatus.value === undefined ||
-          order.status === selectedStatus.value),
+        (selectedStatus.value === undefined || order.status === selectedStatus.value)
     )
     .map((order) => {
       const statusMeta = getStatusMeta(order.status);
       const start = order.startTime || currentDate.value.format('YYYY-MM-DD');
-      const end =
-        order.endTime || dayjs(start).add(1, 'day').format('YYYY-MM-DD');
+      const end = order.endTime || dayjs(start).add(1, 'day').format('YYYY-MM-DD');
       const editable = canManageSchedule.value && order.status === 1;
       return {
         classNames: [
           `calendar-event--status-${order.status ?? 0}`,
-          ...(dayjs(end).isAfter(dayjs(areaToday.value), 'day')
-            ? []
-            : ['calendar-event--history']),
+          ...(dayjs(end).isAfter(dayjs(areaToday.value), 'day') ? [] : ['calendar-event--history']),
           ...(order.status === 1 ? [] : ['calendar-event--locked']),
         ],
         id: String(order.id),
@@ -435,21 +449,65 @@ const calendarEvents = computed<CalendarEvent[]>(() =>
         extendedProps: { subOrder: order },
         backgroundColor: statusMeta.softColor,
         textColor: statusMeta.textColor,
-        durationEditable: false,
+        durationEditable: editable,
         editable,
         startEditable: editable,
-      };
-    }),
-);
+      } satisfies CalendarEvent;
+    });
+  const preview = pendingGuestDropPreview.value;
+  if (preview) {
+    events.push({
+      backgroundColor: preview.isAvailable ? '#dbeafe' : '#fee2e2',
+      classNames: [
+        'calendar-event--drop-preview',
+        preview.isAvailable
+          ? 'calendar-event--drop-preview-available'
+          : 'calendar-event--drop-preview-unavailable',
+      ],
+      durationEditable: false,
+      editable: false,
+      end: preview.end,
+      extendedProps: { dropPreview: preview },
+      id: `pending-drop-preview-${preview.bedId}`,
+      resourceId: `bed-${preview.bedId}`,
+      start: preview.start,
+      startEditable: false,
+      textColor: preview.isAvailable ? '#1e40af' : '#991b1b',
+      title: '待分配住宿人',
+    });
+  }
+  for (const draft of pendingAllocationDrafts.value) {
+    if (!visibleBedIds.value.has(`bed-${draft.bedId}`)) continue;
+    const depth = getDraftConflictDepth(draft);
+    // 冲突配色取决于是否真的存在冲突；层级（depth）只决定错位量，
+    // 两个互相冲突的草稿里排在前面的那个 depth 可能是 0（不挪位），但仍要标红。
+    const conflicted = isDraftConflicted(draft);
+    events.push({
+      backgroundColor: conflicted ? '#fee2e2' : '#dbeafe',
+      classNames: [
+        'calendar-event--pending-draft',
+        ...(conflicted ? ['calendar-event--pending-draft-conflict'] : []),
+      ],
+      durationEditable: true,
+      editable: true,
+      end: draft.endDate,
+      extendedProps: { pendingDraft: draft },
+      id: `pending-draft-${draft.guest.id}`,
+      resourceId: `bed-${draft.bedId}`,
+      start: draft.startDate,
+      startEditable: true,
+      styles: getDraftConflictStyles(depth),
+      textColor: conflicted ? '#991b1b' : '#1e40af',
+      title: draft.guest.userName || '待保存排房',
+    });
+  }
+  return events;
+});
 
 const totalCapacity = computed(() =>
   (allocationWorkbench.value?.rooms ?? [])
     .filter((room) => room.status === 0)
-    .reduce(
-      (total, room) =>
-        total + room.beds.filter((bed) => bed.status === 0).length,
-      0,
-    ),
+    .reduce((total, room) => total + room.beds.filter((bed) => bed.status === 0).length, 0)
 );
 
 const currentGuestCount = computed(() =>
@@ -463,26 +521,20 @@ const currentGuestCount = computed(() =>
             bed.status === 0 &&
             bed.assignments.some(
               (assignment) =>
-                !dayjs(areaToday.value).isBefore(
-                  dayjs(assignment.startDate),
-                  'day',
-                ) &&
-                dayjs(areaToday.value).isBefore(
-                  dayjs(assignment.endDate),
-                  'day',
-                ),
-            ),
+                !dayjs(areaToday.value).isBefore(dayjs(assignment.startDate), 'day') &&
+                dayjs(areaToday.value).isBefore(dayjs(assignment.endDate), 'day')
+            )
         ).length,
-      0,
-    ),
+      0
+    )
 );
 
 const availableBedCount = computed(() =>
-  Math.max(0, totalCapacity.value - currentGuestCount.value),
+  Math.max(0, totalCapacity.value - currentGuestCount.value)
 );
 
 const activeBookingCount = computed(
-  () => rawEvents.value.filter((order) => order.status !== 2).length,
+  () => rawEvents.value.filter((order) => order.status !== 2).length
 );
 
 const occupancyRate = computed(() => {
@@ -493,24 +545,13 @@ const occupancyRate = computed(() => {
   let occupiedRoomDays = 0;
   for (const order of rawEvents.value) {
     if (order.status === 2 || !order.startTime || !order.endTime) continue;
-    const start = dayjs(order.startTime).isAfter(monthStart)
-      ? dayjs(order.startTime)
-      : monthStart;
-    const end = dayjs(order.endTime).isBefore(monthEnd)
-      ? dayjs(order.endTime)
-      : monthEnd;
-    occupiedRoomDays += Math.max(
-      0,
-      end.startOf('day').diff(start.startOf('day'), 'day'),
-    );
+    const start = dayjs(order.startTime).isAfter(monthStart) ? dayjs(order.startTime) : monthStart;
+    const end = dayjs(order.endTime).isBefore(monthEnd) ? dayjs(order.endTime) : monthEnd;
+    occupiedRoomDays += Math.max(0, end.startOf('day').diff(start.startOf('day'), 'day'));
   }
-  const availableRoomDays =
-    totalCapacity.value * currentDate.value.daysInMonth();
+  const availableRoomDays = totalCapacity.value * currentDate.value.daysInMonth();
 
-  return Math.min(
-    100,
-    Math.round((occupiedRoomDays / availableRoomDays) * 100),
-  );
+  return Math.min(100, Math.round((occupiedRoomDays / availableRoomDays) * 100));
 });
 
 const statCards = computed(() => [
@@ -590,9 +631,7 @@ function getOrderDays(order?: DormApi.DormSubOrder) {
 
 function formatWeekday(value?: string) {
   if (!value) return '-';
-  return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][
-    dayjs(value).day()
-  ];
+  return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dayjs(value).day()];
 }
 
 function formatCalendarDayHeader(date: Date) {
@@ -616,14 +655,11 @@ function renderResourceLabel({ resource }: any) {
     toggle.type = 'button';
     toggle.className = 'calendar-floor-toggle';
     toggle.setAttribute('aria-expanded', String(!props.collapsed));
-    toggle.setAttribute(
-      'aria-label',
-      `${props.collapsed ? '展开' : '收起'} ${props.floor}F 楼层`,
-    );
+    toggle.setAttribute('aria-label', `${props.collapsed ? '展开' : '收起'} ${props.floor}F 楼层`);
 
     const chevron = createCalendarIcon(
       props.collapsed ? 'lucide:chevron-right' : 'lucide:chevron-down',
-      'calendar-floor-toggle__chevron',
+      'calendar-floor-toggle__chevron'
     );
     const title = document.createElement('strong');
     title.textContent = `${props.floor}F 楼层`;
@@ -652,10 +688,7 @@ function renderResourceLabel({ resource }: any) {
   ]
     .filter(Boolean)
     .join(' ');
-  wrapper.style.setProperty(
-    '--room-row-span',
-    String(Math.max(1, Number(props.bedCount) || 1)),
-  );
+  wrapper.style.setProperty('--room-row-span', String(Math.max(1, Number(props.bedCount) || 1)));
   if (props.roomFirst && room) {
     const roomCell = document.createElement('div');
     roomCell.className = 'calendar-room-cell calendar-room-cell--primary';
@@ -674,10 +707,7 @@ function renderResourceLabel({ resource }: any) {
 
   const bedCell = document.createElement('div');
   bedCell.className = 'calendar-bed-slot';
-  const bedIcon = createCalendarIcon(
-    'lucide:bed-single',
-    'calendar-bed-slot__icon',
-  );
+  const bedIcon = createCalendarIcon('lucide:bed-single', 'calendar-bed-slot__icon');
   const bedInfo = document.createElement('div');
   bedInfo.className = 'calendar-bed-slot__info';
   const bedTitle = document.createElement('strong');
@@ -698,7 +728,7 @@ function renderResourceLabel({ resource }: any) {
   bedInfo.append(bedTitle, bedMeta);
   bedCell.setAttribute(
     'aria-label',
-    `床位 ${bed?.bedCode || resource.title}，${bedStatusDescription}`,
+    `床位 ${bed?.bedCode || resource.title}，${bedStatusDescription}`
   );
   bedCell.title = bedStatusDescription;
   bedCell.append(bedIcon, bedInfo);
@@ -714,22 +744,38 @@ function toggleFloor(floor: number) {
 }
 
 function renderEventContent({ event }: any) {
-  const order = event.extendedProps?.subOrder as
-    | DormApi.DormSubOrder
-    | undefined;
+  const dropPreview = event.extendedProps?.dropPreview as PendingGuestDropPreview | undefined;
+  if (dropPreview) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'calendar-drop-preview-content';
+    const guest = document.createElement('strong');
+    guest.textContent = draggingGuest.value?.userName || '待分配住宿人';
+    const target = document.createElement('span');
+    target.textContent = dropPreview.isAvailable
+      ? `候选位置 · ${dropPreview.roomName}`
+      : '时段内已有入住安排';
+    wrapper.append(guest, target);
+    return { domNodes: [wrapper] };
+  }
+  const pendingDraft = event.extendedProps?.pendingDraft as PendingAllocationDraft | undefined;
+  if (pendingDraft) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'calendar-draft-content';
+    const guest = document.createElement('strong');
+    guest.textContent = pendingDraft.guest.userName || '待保存排房';
+    const status = document.createElement('span');
+    status.textContent = isDraftConflicted(pendingDraft) ? '⚠ 冲突' : '待保存';
+    wrapper.append(guest, status);
+    return { domNodes: [wrapper] };
+  }
+  const order = event.extendedProps?.subOrder as DormApi.DormSubOrder | undefined;
   const wrapper = document.createElement('div');
   wrapper.className = 'calendar-event-content';
   const start = dayjs(order?.startTime);
   const end = dayjs(order?.endTime);
   const totalDays = Math.max(1, end.diff(start, 'day'));
-  const elapsedDays = Math.max(
-    0,
-    Math.min(totalDays, dayjs(areaToday.value).diff(start, 'day')),
-  );
-  wrapper.style.setProperty(
-    '--history-ratio',
-    `${(elapsedDays / totalDays) * 100}%`,
-  );
+  const elapsedDays = Math.max(0, Math.min(totalDays, dayjs(areaToday.value).diff(start, 'day')));
+  wrapper.style.setProperty('--history-ratio', `${(elapsedDays / totalDays) * 100}%`);
 
   const guest = document.createElement('strong');
   guest.textContent = order?.userName || '未填写住客';
@@ -743,213 +789,23 @@ function renderEventContent({ event }: any) {
   return { domNodes: [wrapper] };
 }
 
-function updateCalendarOptions() {
-  if (!calendarInstance) return;
-  calendarInstance.setOption('resources', calendarResources.value);
-  calendarInstance.setOption('events', calendarEvents.value);
-  calendarInstance.setOption('highlightedDates', [areaToday.value]);
-  scheduleCalendarLayoutSync();
-}
-
-function getCalendarScrollElement() {
-  return calendarRef.value?.querySelector<HTMLElement>('.ec-body') ?? null;
-}
-
-function getCalendarDayWidth() {
-  return (
-    calendarRef.value
-      ?.querySelector<HTMLElement>('.ec-body .ec-days .ec-day')
-      ?.getBoundingClientRect().width || SLOT_WIDTH
-  );
-}
-
-function syncCalendarDayWidth() {
-  if (!calendarRef.value) return;
-  calendarRef.value.style.setProperty(
-    '--scheduler-day-width',
-    `${getCalendarDayWidth()}px`,
-  );
-}
-
-function syncRoomCardHeights() {
-  const rows = Array.from(
-    calendarRef.value?.querySelectorAll<HTMLElement>(
-      '.ec-sidebar .ec-resource',
-    ) ?? [],
-  );
-  const timelineRows = Array.from(
-    calendarRef.value?.querySelectorAll<HTMLElement>('.ec-body .ec-days') ?? [],
-  );
-  rows.forEach((row, rowIndex) => {
-    const timelineRow = timelineRows[rowIndex];
-    if (!timelineRow) return;
-    const isFloorRow = Boolean(row.querySelector('.calendar-floor-row'));
-    timelineRow.classList.toggle('calendar-timeline-row--floor', isFloorRow);
-    timelineRow.style.setProperty(
-      'flex-basis',
-      `${isFloorRow ? CALENDAR_FLOOR_ROW_HEIGHT : CALENDAR_ROW_HEIGHT}px`,
-      'important',
-    );
-    timelineRow.style.setProperty(
-      'min-height',
-      `${isFloorRow ? CALENDAR_FLOOR_ROW_HEIGHT : CALENDAR_ROW_HEIGHT}px`,
-      'important',
-    );
-    timelineRow.style.setProperty(
-      'max-height',
-      `${isFloorRow ? CALENDAR_FLOOR_ROW_HEIGHT : CALENDAR_ROW_HEIGHT}px`,
-      'important',
-    );
-    const timelineHeight = timelineRow.getBoundingClientRect().height;
-    row.style.setProperty(
-      'flex-basis',
-      `${timelineHeight}px`,
-      'important',
-    );
-    row.style.setProperty('min-height', `${timelineHeight}px`, 'important');
-    row.style.setProperty('max-height', `${timelineHeight}px`, 'important');
-  });
-  rows.forEach((row, rowIndex) => {
-    const resourceRow = row.querySelector<HTMLElement>(
-      '.calendar-resource-row--first',
-    );
-    const roomCell = resourceRow?.querySelector<HTMLElement>(
-      '.calendar-room-cell--primary',
-    );
-    if (!resourceRow || !roomCell) return;
-    const rowSpan = Math.max(
-      1,
-      Number(resourceRow.style.getPropertyValue('--room-row-span')) || 1,
-    );
-    const roomHeight = rows
-      .slice(rowIndex, rowIndex + rowSpan)
-      .reduce((height, currentRow) => {
-        return height + currentRow.getBoundingClientRect().height;
-      }, 0);
-    roomCell.style.height = `${roomHeight}px`;
-  });
-  syncCalendarDayWidth();
-  syncCalendarScrollRanges();
-}
-
-function syncSidebarScrollShadow() {
-  const scrollElement = getCalendarScrollElement();
-  calendarRef.value?.classList.toggle(
-    'ec-scheduler--sidebar-elevated',
-    Boolean(scrollElement && scrollElement.scrollLeft > 0.5),
-  );
-}
-
-function handleCalendarScroll() {
-  syncSidebarScrollShadow();
-}
-
-function syncCalendarScrollRanges() {
-  const scrollElement = getCalendarScrollElement();
-  const sidebarContent = calendarRef.value?.querySelector<HTMLElement>(
-    '.ec-sidebar .ec-content',
-  );
-  if (!scrollElement || !sidebarContent || !calendarRef.value) return;
-  const currentSpacer =
-    Number.parseFloat(
-      getComputedStyle(calendarRef.value).getPropertyValue(
-        '--scheduler-sidebar-scroll-spacer',
-      ),
-    ) || 0;
-  const timelineRange = scrollElement.scrollHeight - scrollElement.clientHeight;
-  const sidebarRange =
-    sidebarContent.scrollHeight - sidebarContent.clientHeight;
-  const nextSpacer = Math.max(0, currentSpacer + timelineRange - sidebarRange);
-  if (Math.abs(nextSpacer - currentSpacer) > 0.5) {
-    calendarRef.value.style.setProperty(
-      '--scheduler-sidebar-scroll-spacer',
-      `${nextSpacer}px`,
-    );
-  }
-  syncSidebarScrollShadow();
-}
-
-function observeCalendarRows() {
-  calendarRowsResizeObserver?.disconnect();
-  calendarRowsResizeObserver = new ResizeObserver(syncRoomCardHeights);
-  const rows =
-    calendarRef.value?.querySelectorAll<HTMLElement>(
-      '.ec-sidebar .ec-resource',
-    ) ?? [];
-  rows.forEach((row) => calendarRowsResizeObserver?.observe(row));
-  syncRoomCardHeights();
-}
-
-function scheduleCalendarLayoutSync() {
-  if (calendarLayoutFrame !== null) {
-    cancelAnimationFrame(calendarLayoutFrame);
-  }
-  calendarLayoutFrame = requestAnimationFrame(() => {
-    calendarLayoutFrame = requestAnimationFrame(() => {
-      calendarLayoutFrame = null;
-      observeCalendarRows();
-    });
-  });
-}
-
-function handleCalendarInteractionLayoutChange() {
-  // 拖动会由日历库重建资源标签节点；重新绑定观察器并恢复多人间跨行高度。
-  observeCalendarRows();
-  scheduleCalendarLayoutSync();
-}
-
-function handleCalendarEventDragStart() {
-  isCalendarEventDragging.value = true;
-  handleCalendarInteractionLayoutChange();
-}
-
-function handleCalendarEventDragStop() {
-  isCalendarEventDragging.value = false;
-  handleCalendarInteractionLayoutChange();
-}
-
+// 日历自身的渲染/布局机制（行高同步、跨行合并、滚动阴影、滚轮转发等）已下沉到
+// <ResourceTimelineScheduler>，此处只保留业务侧需要的几个轻量委托。
 function revertCalendarChange(revert?: () => void) {
-  revert?.();
-  void nextTick().then(() => handleCalendarInteractionLayoutChange());
+  schedulerRef.value?.revertChange(revert);
 }
 
 function scrollCalendarToFocusDate() {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const scrollElement = getCalendarScrollElement();
-      if (!scrollElement) return;
-      syncCalendarDayWidth();
-      const isCurrentAreaMonth = currentDate.value.isSame(
-        areaCurrentMonth.value,
-        'month',
-      );
-      scrollElement.scrollLeft = isCurrentAreaMonth
-        ? Math.max(0, (pastDaysInWindow.value - 2) * getCalendarDayWidth())
-        : 0;
-    });
-  });
+  const isCurrentAreaMonth = currentDate.value.isSame(areaCurrentMonth.value, 'month');
+  schedulerRef.value?.scrollToDayOffset(isCurrentAreaMonth ? pastDaysInWindow.value - 2 : 0);
 }
 
-function handleCalendarWheel(event: WheelEvent) {
-  const calendarElement = calendarRef.value;
-  const target = event.target;
-  if (
-    !calendarElement ||
-    !(target instanceof Node) ||
-    !calendarElement.querySelector('.ec-sidebar')?.contains(target)
-  ) {
-    return;
-  }
+function handleEventDragStart() {
+  isCalendarEventDragging.value = true;
+}
 
-  const scrollElement = getCalendarScrollElement();
-  if (!scrollElement) return;
-
-  event.preventDefault();
-  scrollElement.scrollBy({
-    behavior: 'auto',
-    left: event.deltaX,
-    top: event.deltaY,
-  });
+function handleEventDragStop() {
+  isCalendarEventDragging.value = false;
 }
 
 function syncCompactLayout(width = schedulerPageRef.value?.clientWidth ?? 0) {
@@ -965,10 +821,7 @@ function applyAllocationWorkbench(data: DormApi.RoomAllocationWorkbench) {
       bed.assignments.map((assignment) => ({
         assignmentId: assignment.id,
         bedId: bed.id,
-        days: Math.max(
-          1,
-          dayjs(assignment.endDate).diff(dayjs(assignment.startDate), 'day'),
-        ),
+        days: Math.max(1, dayjs(assignment.endDate).diff(dayjs(assignment.startDate), 'day')),
         endTime: assignment.endDate,
         guestVersion: assignment.guestVersion,
         id: assignment.guestId,
@@ -983,8 +836,8 @@ function applyAllocationWorkbench(data: DormApi.RoomAllocationWorkbench) {
         subOrderSerial: '',
         userId: 0,
         userName: assignment.guestName,
-      })),
-    ),
+      }))
+    )
   );
 }
 
@@ -992,7 +845,6 @@ async function fetchCalendarEvents() {
   if (!selectedBuildId.value) {
     allocationWorkbench.value = undefined;
     rawEvents.value = [];
-    updateCalendarOptions();
     return;
   }
 
@@ -1001,9 +853,8 @@ async function fetchCalendarEvents() {
       buildId: selectedBuildId.value,
       endDate: dateRange.value.end,
       startDate: dateRange.value.start,
-    }),
+    })
   );
-  updateCalendarOptions();
 }
 
 async function loadBuildingData() {
@@ -1011,7 +862,6 @@ async function loadBuildingData() {
     selectedBuildInfo.value = undefined;
     allocationWorkbench.value = undefined;
     rawEvents.value = [];
-    updateCalendarOptions();
     return;
   }
 
@@ -1028,18 +878,14 @@ async function loadBuildingData() {
     ]);
     selectedBuildInfo.value = buildingInfo;
     applyAllocationWorkbench(workbenchData);
-    updateCalendarOptions();
   } finally {
     loading.value = false;
   }
 }
 
 async function findInitialBuilding(buildId?: number) {
-  const routeAreaId = route.query.areaId
-    ? Number(route.query.areaId)
-    : undefined;
-  const preferredArea =
-    areas.value.find((area) => area.id === routeAreaId) ?? areas.value[0];
+  const routeAreaId = route.query.areaId ? Number(route.query.areaId) : undefined;
+  const preferredArea = areas.value.find((area) => area.id === routeAreaId) ?? areas.value[0];
 
   if (!preferredArea?.id) return;
 
@@ -1072,9 +918,7 @@ async function loadInitialData() {
   loading.value = true;
   try {
     areas.value = await getAreaSimpleList();
-    const routeBuildId = route.query.buildId
-      ? Number(route.query.buildId)
-      : undefined;
+    const routeBuildId = route.query.buildId ? Number(route.query.buildId) : undefined;
     await findInitialBuilding(routeBuildId);
     currentDate.value = areaCurrentMonth.value;
 
@@ -1095,51 +939,16 @@ async function loadInitialData() {
   }
 }
 
-function initCalendar() {
-  if (!calendarRef.value) return;
-
-  calendarInstance = new EventCalendar({
-    target: calendarRef.value,
-    props: {
-      plugins: [ResourceTimeline, Interaction],
-      options: {
-        view: 'resourceTimelineMonth',
-        date: currentDate.value.startOf('month').toDate(),
-        duration: { days: currentDate.value.daysInMonth() },
-        firstDay: 1,
-        locale: 'zh-CN',
-        resources: calendarResources.value,
-        events: calendarEvents.value,
-        headerToolbar: { start: '', center: '', end: '' },
-        dayHeaderFormat: formatCalendarDayHeader,
-        height: 'auto',
-        highlightedDates: [areaToday.value],
-        slotDuration: { days: 1 },
-        slotWidth: SLOT_WIDTH,
-        slotHeight: CALENDAR_ROW_HEIGHT,
-        editable: canManageSchedule.value,
-        selectable: false,
-        eventContent: renderEventContent,
-        resourceLabelContent: renderResourceLabel,
-        eventDragStart: handleCalendarEventDragStart,
-        eventDragStop: handleCalendarEventDragStop,
-        eventDrop: handleEventDrop,
-        eventResizeStart: handleCalendarInteractionLayoutChange,
-        eventResizeStop: handleCalendarInteractionLayoutChange,
-        eventResize: handleEventResize,
-        dateClick: handleSlotSelect,
-        eventClick: handleEventClick,
-        nowIndicator: true,
-      },
-    },
-  });
-  scheduleCalendarLayoutSync();
-  scrollCalendarToFocusDate();
+function discardDraftsOnLocationChange() {
+  if (pendingAllocationDrafts.value.length === 0) return;
+  message.warning(`已清空 ${pendingAllocationDrafts.value.length} 条未保存的排房草稿（切换了区域/楼栋）`);
+  clearPendingDrafts();
 }
 
 async function handleAreaChange(value: unknown) {
   const areaId = Number(value);
   if (!Number.isFinite(areaId)) return;
+  discardDraftsOnLocationChange();
   selectedAreaId.value = areaId;
   selectedBuildInfo.value = undefined;
   allocationWorkbench.value = undefined;
@@ -1159,6 +968,7 @@ async function handleAreaChange(value: unknown) {
 async function handleBuildingChange(value: unknown) {
   const buildId = Number(value);
   if (!Number.isFinite(buildId)) return;
+  discardDraftsOnLocationChange();
   selectedBuildId.value = buildId;
   roomKeyword.value = '';
   selectedStatus.value = undefined;
@@ -1170,10 +980,6 @@ async function handleMonthChange(value: SingleDatePickerValue) {
   const selectedDate = getSingleDatePickerValue(value);
   if (!selectedDate) return;
   currentDate.value = selectedDate.startOf('month');
-  calendarInstance?.setOption('date', currentDate.value.toDate());
-  calendarInstance?.setOption('duration', {
-    days: currentDate.value.daysInMonth(),
-  });
   loading.value = true;
   try {
     await fetchCalendarEvents();
@@ -1225,17 +1031,40 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
     return;
   }
 
-  const order = event.extendedProps?.subOrder as
-    | DormApi.DormSubOrder
-    | undefined;
+  const pendingDraft = event.extendedProps?.pendingDraft as PendingAllocationDraft | undefined;
+  if (pendingDraft) {
+    const resourceProps = newResource?.extendedProps;
+    const sameBedTarget = newResource ? undefined : findRoomAndBedById(pendingDraft.bedId);
+    const room =
+      (resourceProps?.room as DormApi.RoomAllocationRoom | undefined) ?? sameBedTarget?.room;
+    const bed = (resourceProps?.bed as DormApi.RoomAllocationBed | undefined) ?? sameBedTarget?.bed;
+    const startDate = dayjs(event.start).format('YYYY-MM-DD');
+    const endDate = dayjs(event.end).format('YYYY-MM-DD');
+    if ((newResource && resourceProps?.kind !== 'bed') || !room || !bed) {
+      message.warning('草稿只能放在具体床位上');
+      revertCalendarChange(revert);
+      return;
+    }
+    if (!isDraftPlacementAllowed(room, bed, startDate, endDate)) {
+      message.warning('该床位当前不可用或日期无效');
+      revertCalendarChange(revert);
+      return;
+    }
+    if (hasDraftConflict(pendingDraft.guest.id, bed, startDate, endDate)) {
+      message.warning('该床位在此时间段已有安排，草稿将以冲突状态显示，请调整或确认后再保存');
+    }
+    replacePendingDraft({ ...pendingDraft, bedId: bed.id, endDate, roomId: room.id, startDate });
+    return;
+  }
+
+  const order = event.extendedProps?.subOrder as DormApi.DormSubOrder | undefined;
   if (!order) {
     revertCalendarChange(revert);
     return;
   }
   if (order.status !== 1) {
     let warning = '该住宿人尚未完成首次排房';
-    if ((order.status ?? 0) >= 3)
-      warning = '该订单已结算或已分摊，不能再拖动调房';
+    if ((order.status ?? 0) >= 3) warning = '该订单已结算或已分摊，不能再拖动调房';
     else if (order.status === 2) warning = '该订单已取消，排房记录仅供查看';
     message.warning(warning);
     revertCalendarChange(revert);
@@ -1243,25 +1072,55 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
   }
 
   const resourceProps = newResource?.extendedProps;
-  const targetBed = resourceProps?.bed as DormApi.RoomAllocationBed | undefined;
-  const targetRoom = resourceProps?.room as
-    | DormApi.RoomAllocationRoom
-    | undefined;
-  if (resourceProps?.kind !== 'bed' || !targetBed || !targetRoom) {
+  const sameBedTarget = newResource ? undefined : findRoomAndBedById(order.bedId);
+  const targetBed =
+    (resourceProps?.bed as DormApi.RoomAllocationBed | undefined) ?? sameBedTarget?.bed;
+  const targetRoom =
+    (resourceProps?.room as DormApi.RoomAllocationRoom | undefined) ?? sameBedTarget?.room;
+  if ((newResource && resourceProps?.kind !== 'bed') || !targetBed || !targetRoom) {
     message.warning('只能将住宿人拖动到具体床位');
     revertCalendarChange(revert);
     return;
   }
   if (targetBed.id === order.bedId) {
-    message.info('已排房日期不能直接拖动，请使用日期变更流程');
+    const newStart = dayjs(event.start).format('YYYY-MM-DD');
+    const newEnd = dayjs(event.end).format('YYYY-MM-DD');
+    const currentStart = dayjs(order.startTime).format('YYYY-MM-DD');
+    const currentEnd = dayjs(order.endTime).format('YYYY-MM-DD');
+    if (newStart === currentStart && newEnd === currentEnd) {
+      revertCalendarChange(revert);
+      return;
+    }
+    openDragPeriodChange(order, newStart, newEnd, () => revertCalendarChange(revert));
+    return;
+  }
+  if (targetRoom.status !== 0 || targetBed.status !== 0) {
+    message.warning(targetRoom.status === 0 ? '目标床位已停用' : '目标房间已停用');
     revertCalendarChange(revert);
     return;
   }
+  const transferStart = dayjs(order.startTime).format('YYYY-MM-DD');
+  const transferEnd = dayjs(order.endTime).format('YYYY-MM-DD');
+  const transferConflicts = getBedAssignmentConflicts(
+    targetBed,
+    transferStart,
+    transferEnd,
+    order.id
+  );
+  if (transferConflicts.length > 0) {
+    const names = transferConflicts.map((item) => item.guestName || '未命名住宿人').join('、');
+    message.warning(
+      `「${targetRoom.roomAlias || targetRoom.roomCode} / ${targetBed.bedCode}」在该住宿期内已被 ${names} 占用，请更换床位或调整住宿期后再调房`
+    );
+    revertCalendarChange(revert);
+    return;
+  }
+
   const confirmed = await confirmScheduleChange(
     '确认整段调房？',
     `${order.userName || '该住客'}将从入住首日开始调整至「${
       targetRoom.roomAlias || targetRoom.roomCode
-    } / ${targetBed.bedCode}」，原床位历史会保留。`,
+    } / ${targetBed.bedCode}」，原床位历史会保留。`
   );
 
   if (!confirmed) {
@@ -1271,9 +1130,7 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
 
   try {
     await transferDormBed({
-      effectiveDate: dayjs(oldEvent.start || order.startTime).format(
-        'YYYY-MM-DD',
-      ),
+      effectiveDate: dayjs(oldEvent.start || order.startTime).format('YYYY-MM-DD'),
       guestId: order.id,
       operationNo: `TRANSFER-${order.id}-${Date.now()}`,
       reason: '排房日历拖拽调房',
@@ -1295,36 +1152,54 @@ async function handleEventResize({ event, revert }: any) {
     return;
   }
 
-  const order = event.extendedProps?.subOrder as
-    | DormApi.DormSubOrder
-    | undefined;
+  const pendingDraft = event.extendedProps?.pendingDraft as PendingAllocationDraft | undefined;
+  if (pendingDraft) {
+    const room = allocationWorkbench.value?.rooms.find((item) => item.id === pendingDraft.roomId);
+    const bed = room?.beds.find((item) => item.id === pendingDraft.bedId);
+    const startDate = dayjs(event.start).format('YYYY-MM-DD');
+    const endDate = dayjs(event.end).format('YYYY-MM-DD');
+    if (!room || !bed || !isDraftPlacementAllowed(room, bed, startDate, endDate)) {
+      message.warning('调整后的日期无效或床位不可用');
+      revertCalendarChange(revert);
+      return;
+    }
+    if (hasDraftConflict(pendingDraft.guest.id, bed, startDate, endDate)) {
+      message.warning('该床位在调整后的时间段已有安排，草稿将以冲突状态显示');
+    }
+    replacePendingDraft({ ...pendingDraft, endDate, startDate });
+    return;
+  }
+
+  const order = event.extendedProps?.subOrder as DormApi.DormSubOrder | undefined;
   if (!order) {
     revertCalendarChange(revert);
     return;
   }
+  if (order.status !== 1) {
+    message.warning('该订单当前状态不支持调整日期');
+    revertCalendarChange(revert);
+    return;
+  }
 
-  message.info('首次排房可调整审批日期；已排房记录请走日期变更流程');
-  revertCalendarChange(revert);
+  const newStart = dayjs(event.start).format('YYYY-MM-DD');
+  const newEnd = dayjs(event.end).format('YYYY-MM-DD');
+  const currentStart = dayjs(order.startTime).format('YYYY-MM-DD');
+  const currentEnd = dayjs(order.endTime).format('YYYY-MM-DD');
+  if (newStart === currentStart && newEnd === currentEnd) {
+    revertCalendarChange(revert);
+    return;
+  }
+  openDragPeriodChange(order, newStart, newEnd, () => revertCalendarChange(revert));
 }
 
 function handleSlotSelect({ date, resource, start }: any) {
-  if (
-    !canViewPendingOrders.value ||
-    !resource?.id ||
-    resource.extendedProps?.kind !== 'bed'
-  ) {
+  if (!canViewPendingOrders.value || !resource?.id || resource.extendedProps?.kind !== 'bed') {
     return;
   }
-  const room = resource.extendedProps?.room as
-    | DormApi.RoomAllocationRoom
-    | undefined;
-  const bed = resource.extendedProps?.bed as
-    | DormApi.RoomAllocationBed
-    | undefined;
+  const room = resource.extendedProps?.room as DormApi.RoomAllocationRoom | undefined;
+  const bed = resource.extendedProps?.bed as DormApi.RoomAllocationBed | undefined;
   if (room?.status !== 0 || bed?.status !== 0) {
-    message.warning(
-      room?.status === 0 ? '该床位当前已停用' : '该房间当前已停用',
-    );
+    message.warning(room?.status === 0 ? '该床位当前已停用' : '该房间当前已停用');
     return;
   }
   allocationPresetRoomId.value = Number(resource.extendedProps?.room?.id);
@@ -1341,9 +1216,7 @@ function openPendingOrders() {
   pendingPanelCollapsed.value = !pendingPanelCollapsed.value;
 }
 
-async function openPendingGuestAllocation(
-  guest: DormApi.PendingAllocationGuest,
-) {
+async function openPendingGuestAllocation(guest: DormApi.PendingAllocationGuest) {
   await allocationDrawerRef.value?.openAllocation(guest, {
     bedId: allocationPresetBedId.value,
     roomId: allocationPresetRoomId.value,
@@ -1351,113 +1224,455 @@ async function openPendingGuestAllocation(
   });
 }
 
-function startPendingGuestDrag(
-  guest: DormApi.PendingAllocationGuest,
-  event: DragEvent,
-) {
+// 一键加入日历：按审批住宿期在启用房间中挑选第一个无冲突床位（优先匹配偏好房型），
+// 找不到空闲床位时不创建草稿，交由用户手动拖拽。
+function findAvailableBedForGuest(guest: DormApi.PendingAllocationGuest) {
+  const period = getApprovedGuestPeriod(guest);
+  if (!period.start || !period.end) return undefined;
+  const rooms = (allocationWorkbench.value?.rooms ?? [])
+    .filter((room) => room.status === 0)
+    .toSorted((a, b) => {
+      const aMatch = guest.requestedRoomType && a.roomType === guest.requestedRoomType ? 0 : 1;
+      const bMatch = guest.requestedRoomType && b.roomType === guest.requestedRoomType ? 0 : 1;
+      return aMatch - bMatch;
+    });
+  for (const room of rooms) {
+    const bed = room.beds.find(
+      (item) => item.status === 0 && !hasDraftConflict(guest.id, item, period.start!, period.end!)
+    );
+    if (bed) return { bedId: bed.id, roomId: room.id };
+  }
+  return undefined;
+}
+
+function quickAddGuestToCalendar(guest: DormApi.PendingAllocationGuest) {
+  if (getPendingDraft(guest.id)) {
+    message.info('该住宿人已加入日历草稿');
+    return true;
+  }
+  const target = findAvailableBedForGuest(guest);
+  if (!target) {
+    message.warning(`未找到 ${guest.userName || '该住宿人'} 的空闲床位，请手动拖拽安排`);
+    return false;
+  }
+  const created = createPendingDraft(guest, target, { rejectOnConflict: true });
+  if (created) void focusPendingGuestMonth(guest);
+  return created;
+}
+
+async function quickAddAllPendingGuests() {
+  const guests = visiblePendingGuests.value.filter((guest) => !getPendingDraft(guest.id));
+  if (guests.length === 0) {
+    message.info('没有待加入日历的住宿人');
+    return;
+  }
+  let addedCount = 0;
+  const failedNames: string[] = [];
+  for (const guest of guests) {
+    const target = findAvailableBedForGuest(guest);
+    if (target && createPendingDraft(guest, target, { rejectOnConflict: true, silent: true })) {
+      addedCount += 1;
+    } else {
+      failedNames.push(guest.userName || '未命名住宿人');
+    }
+  }
+  if (addedCount > 0) message.success(`已一键加入 ${addedCount} 位住宿人至日历草稿`);
+  if (failedNames.length > 0) {
+    message.warning(`以下住宿人未找到空闲床位，请手动拖拽：${failedNames.join('、')}`);
+  }
+}
+
+function startPendingGuestDrag(guest: DormApi.PendingAllocationGuest, event: DragEvent) {
   event.dataTransfer?.setData('application/x-dorm-guest-id', String(guest.id));
   event.dataTransfer?.setData('text/plain', String(guest.id));
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
   handleCandidateDragStart(guest);
 }
 
-function handleCandidateDragOver(event: DragEvent) {
-  if (!canViewPendingOrders.value || !calendarInstance) return;
-  const point = (
-    calendarInstance as EventCalendar & {
-      dateFromPoint: (x: number, y: number) => CalendarPointInfo | null;
-    }
-  ).dateFromPoint(event.clientX, event.clientY);
-  if (point?.resource?.extendedProps?.kind !== 'bed') {
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
-    return;
+function getApprovedGuestPeriod(guest: DormApi.PendingAllocationGuest) {
+  return {
+    end: guest.approvedEndDate || guest.plannedEndDate,
+    start: guest.approvedStartDate || guest.plannedStartDate,
+  };
+}
+
+// 硬性规则：房间/床位停用或日期无效时拒绝落位，不允许拖入。
+function isDraftPlacementAllowed(
+  room: DormApi.RoomAllocationRoom,
+  bed: DormApi.RoomAllocationBed,
+  startDate: string,
+  endDate: string
+) {
+  return room.status === 0 && bed.status === 0 && dayjs(startDate).isBefore(dayjs(endDate), 'day');
+}
+
+// 软性冲突：目标床位已有入住安排或与其他草稿重叠，允许落位但需要在日历上以危险色叠加提示。
+function getDraftConflicts(
+  guestId: number,
+  bed: DormApi.RoomAllocationBed,
+  startDate: string,
+  endDate: string
+) {
+  const overlaps = (start: string, end: string) =>
+    dayjs(start).isBefore(dayjs(endDate)) && dayjs(end).isAfter(dayjs(startDate));
+  return {
+    assignmentConflicts: bed.assignments.filter((assignment) =>
+      overlaps(assignment.startDate, assignment.endDate)
+    ),
+    draftConflicts: pendingAllocationDrafts.value.filter(
+      (draft) =>
+        draft.guest.id !== guestId && draft.bedId === bed.id && overlaps(draft.startDate, draft.endDate)
+    ),
+  };
+}
+
+function hasDraftConflict(
+  guestId: number,
+  bed: DormApi.RoomAllocationBed,
+  startDate: string,
+  endDate: string
+) {
+  const { assignmentConflicts, draftConflicts } = getDraftConflicts(guestId, bed, startDate, endDate);
+  return assignmentConflicts.length > 0 || draftConflicts.length > 0;
+}
+
+function getBedForDraft(draft: PendingAllocationDraft) {
+  const room = allocationWorkbench.value?.rooms.find((item) => item.id === draft.roomId);
+  return room?.beds.find((item) => item.id === draft.bedId);
+}
+
+// event-calendar 只在拖拽跨床位时才提供 newResource；仅调整日期（同床位）时为 undefined，
+// 此时用事件当前所在床位作为目标床位，而不是误判为“未放在具体床位上”。
+function findRoomAndBedById(bedId?: number) {
+  if (bedId === undefined) return undefined;
+  const room = allocationWorkbench.value?.rooms.find((item) =>
+    item.beds.some((bed) => bed.id === bedId)
+  );
+  const bed = room?.beds.find((item) => item.id === bedId);
+  return room && bed ? { bed, room } : undefined;
+}
+
+// 已排房记录（调房 / 同床位改期）在提交前的前端冲突校验：目标床位在目标时间段内是否
+// 已有其他住宿人（排除自己当前的记录），避免拖拽产生的调整请求造成双人占用同一床位。
+function getBedAssignmentConflicts(
+  bed: DormApi.RoomAllocationBed,
+  startDate: string,
+  endDate: string,
+  excludeGuestId?: number
+) {
+  const overlaps = (start: string, end: string) =>
+    dayjs(start).isBefore(dayjs(endDate)) && dayjs(end).isAfter(dayjs(startDate));
+  return bed.assignments.filter(
+    (assignment) => assignment.guestId !== excludeGuestId && overlaps(assignment.startDate, assignment.endDate)
+  );
+}
+
+function isDraftConflicted(draft: PendingAllocationDraft) {
+  const bed = getBedForDraft(draft);
+  if (!bed) return false;
+  return hasDraftConflict(draft.guest.id, bed, draft.startDate, draft.endDate);
+}
+
+// 冲突层级：0 = 无冲突（保持默认样式和位置）；>=1 = 第几层叠放，用于错开显示，
+// 避免多个互相冲突的草稿完全重叠、无法单独点击。层级按加入草稿的先后顺序（数组下标）计算，
+// 已有床位安排永远算作最底层（层级 0 的位置），不参与错开。
+function getDraftConflictDepth(draft: PendingAllocationDraft) {
+  const bed = getBedForDraft(draft);
+  if (!bed) return 0;
+  const { assignmentConflicts, draftConflicts } = getDraftConflicts(
+    draft.guest.id,
+    bed,
+    draft.startDate,
+    draft.endDate
+  );
+  if (assignmentConflicts.length === 0 && draftConflicts.length === 0) return 0;
+
+  const group = [draft, ...draftConflicts].toSorted(
+    (a, b) => pendingAllocationDrafts.value.indexOf(a) - pendingAllocationDrafts.value.indexOf(b)
+  );
+  const rank = Math.max(
+    0,
+    group.findIndex((item) => item.guest.id === draft.guest.id)
+  );
+  return rank + (assignmentConflicts.length > 0 ? 1 : 0);
+}
+
+const DRAFT_CONFLICT_LAYER_STYLES = [
+  { marginTop: 10, size: 40 },
+  { marginTop: 20, size: 28 },
+  { marginTop: 28, size: 20 },
+] as const;
+
+function getDraftConflictStyles(depth: number) {
+  if (depth <= 0) return [];
+  const layer = DRAFT_CONFLICT_LAYER_STYLES[Math.min(depth, DRAFT_CONFLICT_LAYER_STYLES.length) - 1]!;
+  return [
+    `z-index:${8 + depth}`,
+    `margin-top:${layer.marginTop}px`,
+    `height:${layer.size}px`,
+    `min-height:${layer.size}px`,
+    `block-size:${layer.size}px`,
+  ];
+}
+
+function replacePendingDraft(draft: PendingAllocationDraft) {
+  const exists = pendingAllocationDrafts.value.some((item) => item.guest.id === draft.guest.id);
+  pendingAllocationDrafts.value = exists
+    ? pendingAllocationDrafts.value.map((item) => (item.guest.id === draft.guest.id ? draft : item))
+    : [...pendingAllocationDrafts.value, draft];
+}
+
+function removePendingDraft(guestId: number) {
+  pendingAllocationDrafts.value = pendingAllocationDrafts.value.filter(
+    (draft) => draft.guest.id !== guestId
+  );
+  delete draftReasons.value[guestId];
+}
+
+function getPendingDraft(guestId: number) {
+  return pendingAllocationDrafts.value.find((draft) => draft.guest.id === guestId);
+}
+
+function getPendingDraftTarget(draft: PendingAllocationDraft) {
+  const room = allocationWorkbench.value?.rooms.find((item) => item.id === draft.roomId);
+  const bed = room?.beds.find((item) => item.id === draft.bedId);
+  return `${room?.roomAlias || room?.roomCode || '房间'} / ${bed?.bedCode || '床位'}`;
+}
+
+function clearPendingDrafts() {
+  pendingAllocationDrafts.value = [];
+  draftReasons.value = {};
+}
+
+function isDraftPeriodChanged(draft: PendingAllocationDraft) {
+  const approved = getApprovedGuestPeriod(draft.guest);
+  return draft.startDate !== approved.start || draft.endDate !== approved.end;
+}
+
+function createPendingDraft(
+  guest: DormApi.PendingAllocationGuest,
+  target: Pick<PendingGuestDropPreview, 'bedId' | 'roomId'>,
+  options: { rejectOnConflict?: boolean; silent?: boolean } = {}
+) {
+  const room = allocationWorkbench.value?.rooms.find((item) => item.id === target.roomId);
+  const bed = room?.beds.find((item) => item.id === target.bedId);
+  const approvedPeriod = getApprovedGuestPeriod(guest);
+  if (!room || !bed || !approvedPeriod.start || !approvedPeriod.end) {
+    message.warning('目标床位或审批住宿日期已变化，请重新拖拽');
+    return false;
   }
-  event.preventDefault();
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-
-  const scrollElement = getCalendarScrollElement();
-  if (!scrollElement) return;
-  const scrollRect = scrollElement.getBoundingClientRect();
-  const drawerLeft = document
-    .querySelector<HTMLElement>('.ant-drawer-open .ant-drawer-content-wrapper')
-    ?.getBoundingClientRect().left;
-  const visibleRight = drawerLeft
-    ? Math.min(scrollRect.right, drawerLeft)
-    : scrollRect.right;
-  let left = 0;
-  let top = 0;
-  if (event.clientX < scrollRect.left + DRAG_SCROLL_EDGE)
-    left = -DRAG_SCROLL_STEP;
-  else if (event.clientX > visibleRight - DRAG_SCROLL_EDGE)
-    left = DRAG_SCROLL_STEP;
-  if (event.clientY < scrollRect.top + DRAG_SCROLL_EDGE)
-    top = -DRAG_SCROLL_STEP;
-  else if (event.clientY > scrollRect.bottom - DRAG_SCROLL_EDGE)
-    top = DRAG_SCROLL_STEP;
-  if (left || top) scrollElement.scrollBy({ behavior: 'auto', left, top });
+  if (!isDraftPlacementAllowed(room, bed, approvedPeriod.start, approvedPeriod.end)) {
+    message.warning('该床位当前不可用或审批住宿日期无效');
+    return false;
+  }
+  const conflicted = hasDraftConflict(guest.id, bed, approvedPeriod.start, approvedPeriod.end);
+  if (conflicted && options.rejectOnConflict) {
+    message.warning('该床位在审批住宿时间内已被占用');
+    return false;
+  }
+  replacePendingDraft({
+    bedId: bed.id,
+    endDate: approvedPeriod.end,
+    guest,
+    roomId: room.id,
+    startDate: approvedPeriod.start,
+  });
+  if (!options.silent) {
+    message.success(
+      conflicted
+        ? '已加入草稿，但目标床位在该时段已有安排，请调整后再保存'
+        : '已加入待保存排房草稿，可继续拖动或拉伸日期后统一保存'
+    );
+  }
+  return true;
 }
 
-function handleCandidateDragStart(guest: DormApi.PendingAllocationGuest) {
-  draggingGuest.value = guest;
-}
-
-function handleCandidateDragEnd() {
-  draggingGuest.value = undefined;
-}
-
-async function handleCandidateDrop(event: DragEvent) {
-  if (!canViewPendingOrders.value || !calendarInstance) return;
-  event.preventDefault();
-  draggingGuest.value = undefined;
-  const guestId = Number(
-    event.dataTransfer?.getData('application/x-dorm-guest-id') ||
-      event.dataTransfer?.getData('text/plain'),
-  );
-  const guest = allocationWorkbench.value?.pendingGuests.find(
-    (item) => item.id === guestId,
-  );
-  const point = (
-    calendarInstance as EventCalendar & {
-      dateFromPoint: (x: number, y: number) => CalendarPointInfo | null;
-    }
-  ).dateFromPoint(event.clientX, event.clientY);
+function getBedTargetAtPoint(x: number, y: number) {
+  const point = schedulerRef.value?.resourceAtPoint(x, y) as CalendarPointInfo | undefined;
   const resourceProps = point?.resource?.extendedProps;
   const room = resourceProps?.room as DormApi.RoomAllocationRoom | undefined;
   const bed = resourceProps?.bed as DormApi.RoomAllocationBed | undefined;
-  if (!point || !guest || resourceProps?.kind !== 'bed' || !room || !bed) {
+  if (resourceProps?.kind !== 'bed' || !room || !bed) return;
+  return { bedId: bed.id, roomId: room.id };
+}
+
+function openDraftSave() {
+  if (pendingAllocationDrafts.value.length === 0) return;
+  if (hasBlockingConflicts.value) {
+    const names = conflictedDrafts.value
+      .map((draft) => draft.guest.userName || '未命名住宿人')
+      .join('、');
+    message.warning(`以下住宿人的草稿与已有安排冲突，请先调整床位或日期再保存：${names}`);
+    return;
+  }
+  if (pendingAllocationDrafts.value.some(isDraftPeriodChanged)) {
+    draftReasonDialogOpen.value = true;
+    return;
+  }
+  void submitPendingDrafts();
+}
+
+async function submitPendingDrafts() {
+  if (hasBlockingConflicts.value) {
+    message.warning('存在冲突床位的草稿，请先解决冲突再保存');
+    return;
+  }
+  const changedWithoutReason = pendingAllocationDrafts.value.find(
+    (draft) => isDraftPeriodChanged(draft) && !draftReasons.value[draft.guest.id]?.trim()
+  );
+  if (changedWithoutReason) {
+    message.warning(`请填写 ${changedWithoutReason.guest.userName || '该住宿人'} 的日期调整原因`);
+    return;
+  }
+  savingDrafts.value = true;
+  try {
+    await allocateDormBeds({
+      allocations: pendingAllocationDrafts.value.map((draft) => ({
+        bedId: draft.bedId,
+        endDate: draft.endDate,
+        guestId: draft.guest.id,
+        operationNo: `BATCH-ROOM-${draft.guest.id}-${Date.now()}-${Math.random()
+          .toString(16)
+          .slice(2)}`,
+        reason: isDraftPeriodChanged(draft)
+          ? draftReasons.value[draft.guest.id]?.trim()
+          : undefined,
+        roomId: draft.roomId,
+        startDate: draft.startDate,
+        version: draft.guest.version,
+      })),
+    });
+    message.success(`已保存 ${pendingAllocationDrafts.value.length} 条排房`);
+    draftReasonDialogOpen.value = false;
+    clearPendingDrafts();
+    await loadBuildingData();
+  } finally {
+    savingDrafts.value = false;
+  }
+}
+
+async function focusPendingGuestMonth(guest: DormApi.PendingAllocationGuest) {
+  const period = getApprovedGuestPeriod(guest);
+  if (!period.start || !period.end || !dayjs(period.start).isValid()) return;
+  const targetMonth = dayjs(period.start).startOf('month');
+  if (targetMonth.isSame(currentDate.value, 'month')) return;
+
+  currentDate.value = targetMonth;
+  try {
+    await fetchCalendarEvents();
+  } catch {
+    // 请求异常由调用层提示；本地占位不受影响，可重新尝试拖拽。
+  } finally {
+    await nextTick();
+    schedulerRef.value?.scrollToDayOffset(0);
+  }
+}
+
+function updatePendingGuestDropPreview(point: CalendarPointInfo | null) {
+  const resourceProps = point?.resource?.extendedProps;
+  const room = resourceProps?.room as DormApi.RoomAllocationRoom | undefined;
+  const bed = resourceProps?.bed as DormApi.RoomAllocationBed | undefined;
+  updatePendingGuestDropPreviewByTarget(room, bed);
+}
+
+function updatePendingGuestDropPreviewByTarget(
+  room?: DormApi.RoomAllocationRoom,
+  bed?: DormApi.RoomAllocationBed
+) {
+  const guest = draggingGuest.value;
+  const period = guest ? getApprovedGuestPeriod(guest) : undefined;
+  if (!room || !bed || !period?.start || !period.end) {
+    pendingGuestDropPreview.value = undefined;
+    return;
+  }
+
+  const isOccupied = bed.assignments.some(
+    (assignment) =>
+      dayjs(assignment.startDate).isBefore(dayjs(period.end)) &&
+      dayjs(assignment.endDate).isAfter(dayjs(period.start))
+  );
+  pendingGuestDropPreview.value = {
+    bedId: bed.id,
+    end: period.end,
+    isAvailable: room.status === 0 && bed.status === 0 && !isOccupied,
+    roomId: room.id,
+    roomName: `${room.roomAlias || room.roomCode || '未命名房间'} / ${bed.bedCode}`,
+    start: period.start,
+  };
+}
+
+function handleCandidateDragOver({
+  target,
+}: {
+  originalEvent: DragEvent;
+  target?: SchedulerPointInfo;
+}) {
+  if (!canViewPendingOrders.value) return;
+  const resourceProps = (target?.resource as CalendarResource | undefined)?.extendedProps;
+  if (resourceProps?.kind !== 'bed' || !resourceProps.room || !resourceProps.bed) {
+    updatePendingGuestDropPreview(null);
+    return;
+  }
+  updatePendingGuestDropPreviewByTarget(
+    resourceProps.room as DormApi.RoomAllocationRoom,
+    resourceProps.bed
+  );
+}
+
+function handleCandidateDragStart(guest: DormApi.PendingAllocationGuest) {
+  pendingGuestDropPreview.value = undefined;
+  draggingGuest.value = guest;
+}
+
+function handleCandidateDragEnd(event?: DragEvent) {
+  const guest = draggingGuest.value;
+  const preview = pendingGuestDropPreview.value;
+  draggingGuest.value = undefined;
+  pendingGuestDropPreview.value = undefined;
+  // 部分浏览器不会向重型日历组件派发 drop；使用最终鼠标坐标反查床位。
+  const target =
+    preview?.isAvailable && preview
+      ? preview
+      : event
+      ? getBedTargetAtPoint(event.clientX, event.clientY)
+      : undefined;
+  if (guest && target && createPendingDraft(guest, target)) {
+    void focusPendingGuestMonth(guest);
+  }
+}
+
+async function handleCandidateDrop({
+  originalEvent,
+  target,
+}: {
+  originalEvent: DragEvent;
+  target?: SchedulerPointInfo;
+}) {
+  if (!canViewPendingOrders.value) return;
+  const guestId = Number(
+    originalEvent.dataTransfer?.getData('application/x-dorm-guest-id') ||
+      originalEvent.dataTransfer?.getData('text/plain')
+  );
+  const guest =
+    draggingGuest.value ||
+    allocationWorkbench.value?.pendingGuests.find((item) => item.id === guestId);
+  const resourceProps = (target?.resource as CalendarResource | undefined)?.extendedProps;
+  const room = resourceProps?.room as DormApi.RoomAllocationRoom | undefined;
+  const bed = resourceProps?.bed as DormApi.RoomAllocationBed | undefined;
+  const bedTarget =
+    resourceProps?.kind === 'bed' && room && bed
+      ? { bedId: bed.id, roomId: room.id }
+      : undefined;
+  const dropTarget = bedTarget || pendingGuestDropPreview.value;
+  if (!guest || !dropTarget) {
     message.warning('请将待分配人员放到具体床位和日期上');
     return;
   }
-  if (room.status !== 0 || bed.status !== 0) {
-    message.warning('该房间或床位当前不可排');
-    return;
+  if (createPendingDraft(guest, dropTarget)) {
+    draggingGuest.value = undefined;
+    pendingGuestDropPreview.value = undefined;
+    void focusPendingGuestMonth(guest);
   }
-  const originalStart = guest.plannedStartDate || guest.approvedStartDate;
-  const originalEnd = guest.plannedEndDate || guest.approvedEndDate;
-  const droppedStart = dayjs(point.date);
-  const nights = Math.max(
-    1,
-    dayjs(originalEnd).diff(dayjs(originalStart), 'day'),
-  );
-  const droppedEnd = droppedStart.add(nights, 'day');
-  const occupied = bed.assignments.some(
-    (assignment) =>
-      dayjs(assignment.startDate).isBefore(droppedEnd) &&
-      dayjs(assignment.endDate).isAfter(droppedStart),
-  );
-  if (occupied) {
-    message.warning('该床位在住宿人的计划时段内已被占用');
-    return;
-  }
-  allocationPresetRoomId.value = room.id;
-  allocationPresetBedId.value = bed.id;
-  allocationPresetStartDate.value = droppedStart.format('YYYY-MM-DD');
-  await nextTick();
-  await allocationDrawerRef.value?.openAllocation(guest, {
-    bedId: bed.id,
-    roomId: room.id,
-    startDate: allocationPresetStartDate.value,
-  });
 }
 
 async function handleAllocationSuccess() {
@@ -1465,9 +1680,7 @@ async function handleAllocationSuccess() {
 }
 
 async function handleEventClick({ event }: any) {
-  const order = event.extendedProps?.subOrder as
-    | DormApi.DormSubOrder
-    | undefined;
+  const order = event.extendedProps?.subOrder as DormApi.DormSubOrder | undefined;
   if (!order) return;
   selectedOrder.value = order;
   allocationHistory.value = [];
@@ -1487,11 +1700,7 @@ function openOrderDetail() {
 }
 
 async function loadTransferAvailability() {
-  if (
-    !selectedBuildId.value ||
-    !selectedOrder.value?.endTime ||
-    !transferDate.value
-  ) {
+  if (!selectedBuildId.value || !selectedOrder.value?.endTime || !transferDate.value) {
     return;
   }
   transferLoading.value = true;
@@ -1515,9 +1724,7 @@ async function loadTransferAvailability() {
 
 async function openTransferDialog() {
   if (!selectedOrder.value?.startTime || !selectedOrder.value.endTime) return;
-  transferDate.value = dayjs(selectedOrder.value.startTime).format(
-    'YYYY-MM-DD',
-  );
+  transferDate.value = dayjs(selectedOrder.value.startTime).format('YYYY-MM-DD');
   transferRoomId.value = undefined;
   transferBedId.value = undefined;
   transferReason.value = '';
@@ -1534,14 +1741,12 @@ function openPeriodChangeDialog() {
 }
 
 function disablePeriodChangeEndDate(value: Dayjs) {
-  const start =
-    selectedOrder.value?.plannedStartTime || selectedOrder.value?.startTime;
+  const start = selectedOrder.value?.plannedStartTime || selectedOrder.value?.startTime;
   return !start || !value.isAfter(dayjs(start), 'day');
 }
 
 function handlePeriodChangeEndDate(value: SingleDatePickerValue) {
-  periodChangeEndDate.value =
-    getSingleDatePickerValue(value)?.format('YYYY-MM-DD') ?? '';
+  periodChangeEndDate.value = getSingleDatePickerValue(value)?.format('YYYY-MM-DD') ?? '';
 }
 
 async function submitPeriodChange() {
@@ -1568,6 +1773,68 @@ async function submitPeriodChange() {
   }
 }
 
+// 已排房记录在同一床位内拖动/拉伸日期：不再直接拒绝，弹窗确认新日期区间与调整原因后再保存，
+// 取消时把日历上的乐观位移还原（revert 由拖拽/拉伸回调传入）。
+function openDragPeriodChange(
+  order: DormApi.DormSubOrder,
+  startDate: string,
+  endDate: string,
+  revert?: () => void
+) {
+  dragPeriodChangeOrder.value = order;
+  dragPeriodChangeStart.value = startDate;
+  dragPeriodChangeEnd.value = endDate;
+  dragPeriodChangeReason.value = '';
+  dragPeriodChangeRevert = revert;
+  dragPeriodChangeOpen.value = true;
+}
+
+function cancelDragPeriodChange() {
+  dragPeriodChangeOpen.value = false;
+  dragPeriodChangeRevert?.();
+  dragPeriodChangeRevert = undefined;
+}
+
+function handleDragPeriodChangeStart(value: SingleDatePickerValue) {
+  dragPeriodChangeStart.value = getSingleDatePickerValue(value)?.format('YYYY-MM-DD') ?? '';
+}
+
+function handleDragPeriodChangeEnd(value: SingleDatePickerValue) {
+  dragPeriodChangeEnd.value = getSingleDatePickerValue(value)?.format('YYYY-MM-DD') ?? '';
+}
+
+async function submitDragPeriodChange() {
+  const order = dragPeriodChangeOrder.value;
+  if (order && dragPeriodChangeConflicts.value.length > 0) {
+    message.warning('新的住宿期与该床位上其他住宿人的安排冲突，请调整日期');
+    return;
+  }
+  if (!order || !canSubmitDragPeriodChange.value) {
+    message.warning('请填写有效的日期区间和调整原因');
+    return;
+  }
+  dragPeriodChangeSubmitting.value = true;
+  try {
+    await adjustPendingGuestPeriod({
+      endDate: dragPeriodChangeEnd.value,
+      guestId: order.id,
+      operationNo: `PERIOD-ADJUST-${order.id}-${Date.now()}`,
+      reason: dragPeriodChangeReason.value.trim(),
+      startDate: dragPeriodChangeStart.value,
+      version: order.guestVersion,
+    });
+    message.success('住宿期已调整');
+    dragPeriodChangeOpen.value = false;
+    dragPeriodChangeRevert = undefined;
+    await fetchCalendarEvents();
+  } catch {
+    dragPeriodChangeRevert?.();
+    dragPeriodChangeRevert = undefined;
+  } finally {
+    dragPeriodChangeSubmitting.value = false;
+  }
+}
+
 function disableTransferDate(value: Dayjs) {
   if (!selectedOrder.value?.startTime || !selectedOrder.value.endTime) {
     return true;
@@ -1579,8 +1846,7 @@ function disableTransferDate(value: Dayjs) {
 }
 
 async function handleTransferDateChange(value: SingleDatePickerValue) {
-  transferDate.value =
-    getSingleDatePickerValue(value)?.format('YYYY-MM-DD') ?? '';
+  transferDate.value = getSingleDatePickerValue(value)?.format('YYYY-MM-DD') ?? '';
   transferBedId.value = undefined;
   await loadTransferAvailability();
 }
@@ -1621,35 +1887,22 @@ async function submitTransfer() {
   }
 }
 
-watch([calendarResources, selectedStatus, areaToday], updateCalendarOptions);
-
 onMounted(async () => {
   syncCompactLayout();
   schedulerResizeObserver = new ResizeObserver(([entry]) => {
     syncCompactLayout(entry?.contentRect.width);
-    scheduleCalendarLayoutSync();
   });
   if (schedulerPageRef.value) {
     schedulerResizeObserver.observe(schedulerPageRef.value);
   }
   await loadInitialData();
   await nextTick();
-  initCalendar();
-  calendarRef.value?.addEventListener('scroll', handleCalendarScroll, true);
+  scrollCalendarToFocusDate();
 });
 
 onBeforeUnmount(() => {
   schedulerResizeObserver?.disconnect();
   schedulerResizeObserver = null;
-  calendarRowsResizeObserver?.disconnect();
-  calendarRowsResizeObserver = null;
-  if (calendarLayoutFrame !== null) {
-    cancelAnimationFrame(calendarLayoutFrame);
-    calendarLayoutFrame = null;
-  }
-  calendarRef.value?.removeEventListener('scroll', handleCalendarScroll, true);
-  calendarInstance?.destroy();
-  calendarInstance = null;
 });
 </script>
 
@@ -1688,10 +1941,7 @@ onBeforeUnmount(() => {
               · {{ getOrderDays(selectedOrder) }} 天
             </div>
           </div>
-          <Tag
-            :color="getStatusMeta(selectedOrder.status).color"
-            class="ml-auto"
-          >
+          <Tag :color="getStatusMeta(selectedOrder.status).color" class="ml-auto">
             {{ getStatusMeta(selectedOrder.status).label }}
           </Tag>
         </div>
@@ -1713,11 +1963,7 @@ onBeforeUnmount(() => {
             <IconifyIcon icon="lucide:bed-double" />
             调房
           </Button>
-          <Button
-            type="primary"
-            class="schedule-detail__action"
-            @click="openOrderDetail"
-          >
+          <Button type="primary" class="schedule-detail__action" @click="openOrderDetail">
             <IconifyIcon icon="lucide:arrow-up-right" />
             查看订单
           </Button>
@@ -1726,9 +1972,7 @@ onBeforeUnmount(() => {
         <div class="schedule-detail__period">
           <div>
             <span>入住</span>
-            <strong>{{
-              dayjs(selectedOrder.startTime).format('YYYY-MM-DD')
-            }}</strong>
+            <strong>{{ dayjs(selectedOrder.startTime).format('YYYY-MM-DD') }}</strong>
             <small>{{ formatWeekday(selectedOrder.startTime) }}</small>
           </div>
           <div class="schedule-detail__period-line">
@@ -1736,9 +1980,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="text-right">
             <span>退宿</span>
-            <strong>{{
-              dayjs(selectedOrder.endTime).format('YYYY-MM-DD')
-            }}</strong>
+            <strong>{{ dayjs(selectedOrder.endTime).format('YYYY-MM-DD') }}</strong>
             <small>{{ formatWeekday(selectedOrder.endTime) }}</small>
           </div>
         </div>
@@ -1777,18 +2019,13 @@ onBeforeUnmount(() => {
                 :class="{ 'opacity-50': history.recordStatus !== 0 }"
               >
                 <div class="flex items-center justify-between gap-3">
-                  <strong>{{
-                    getOperationTypeLabel(history.operationType)
-                  }}</strong>
-                  <Tag
-                    :color="history.recordStatus === 0 ? 'green' : 'default'"
-                  >
+                  <strong>{{ getOperationTypeLabel(history.operationType) }}</strong>
+                  <Tag :color="history.recordStatus === 0 ? 'green' : 'default'">
                     {{ history.recordStatus === 0 ? '有效' : '已作废' }}
                   </Tag>
                 </div>
                 <div class="text-muted-foreground mt-1 text-xs">
-                  {{ history.roomName || '未知房间' }} /
-                  {{ history.bedCode || '未知床位' }} ·
+                  {{ history.roomName || '未知房间' }} / {{ history.bedCode || '未知床位' }} ·
                   {{ history.startDate }} 至 {{ history.endDate }}
                 </div>
                 <div v-if="history.changeReason" class="mt-2 text-xs">
@@ -1802,7 +2039,8 @@ onBeforeUnmount(() => {
         <div class="schedule-detail__tip">
           <IconifyIcon icon="lucide:move-horizontal" :size="17" />
           <span v-if="selectedOrder.status === 1">
-            可拖动此排房更换床位；如需按日期调房，请使用上方操作区的“调房”。
+            拖动整段排房可更换床位；拖动或拉伸日期区间可在原床位内调整住宿期，
+            松手后会弹窗确认原因再保存。
           </span>
           <span v-else>当前状态的排房记录仅供查看，不支持拖拽调整。</span>
         </div>
@@ -1825,25 +2063,17 @@ onBeforeUnmount(() => {
           <div class="text-muted-foreground mt-1 text-xs">
             当前住宿期
             {{
-              dayjs(
-                selectedOrder.plannedStartTime || selectedOrder.startTime,
-              ).format('YYYY-MM-DD')
+              dayjs(selectedOrder.plannedStartTime || selectedOrder.startTime).format('YYYY-MM-DD')
             }}
             至
-            {{
-              dayjs(
-                selectedOrder.plannedEndTime || selectedOrder.endTime,
-              ).format('YYYY-MM-DD')
-            }}
+            {{ dayjs(selectedOrder.plannedEndTime || selectedOrder.endTime).format('YYYY-MM-DD') }}
           </div>
         </div>
 
         <div>
           <div class="mb-1 text-sm font-medium">新退宿日期</div>
           <DatePicker
-            :value="
-              periodChangeEndDate ? dayjs(periodChangeEndDate) : undefined
-            "
+            :value="periodChangeEndDate ? dayjs(periodChangeEndDate) : undefined"
             class="w-full"
             :allow-clear="false"
             :disabled-date="disablePeriodChangeEndDate"
@@ -1862,10 +2092,81 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <div
-          class="text-muted-foreground rounded-lg bg-blue-50 p-3 text-xs dark:bg-blue-950/30"
-        >
+        <div class="text-muted-foreground rounded-lg bg-blue-50 p-3 text-xs dark:bg-blue-950/30">
           延期会继续占用当前最后床位并检查时间冲突；提前退宿会释放退宿日之后的床位。
+        </div>
+      </div>
+    </Modal>
+
+    <Modal
+      v-model:open="dragPeriodChangeOpen"
+      title="确认调整住宿日期"
+      width="560px"
+      ok-text="确认调整"
+      cancel-text="取消"
+      :confirm-loading="dragPeriodChangeSubmitting"
+      :ok-button-props="{ disabled: !canSubmitDragPeriodChange }"
+      @ok="submitDragPeriodChange"
+      @cancel="cancelDragPeriodChange"
+    >
+      <div v-if="dragPeriodChangeOrder" class="space-y-5">
+        <div class="rounded-lg border bg-gray-50 p-3 text-sm dark:bg-gray-900">
+          <strong>{{ dragPeriodChangeOrder.userName || '未填写住客' }}</strong>
+          <div class="text-muted-foreground mt-1 text-xs">
+            原住宿期
+            {{ dayjs(dragPeriodChangeOrder.startTime).format('YYYY-MM-DD') }}
+            至
+            {{ dayjs(dragPeriodChangeOrder.endTime).format('YYYY-MM-DD') }}
+            ，床位不变
+          </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <div class="mb-1 text-sm font-medium">新入住日期</div>
+            <DatePicker
+              :value="dragPeriodChangeStart ? dayjs(dragPeriodChangeStart) : undefined"
+              class="w-full"
+              :allow-clear="false"
+              @change="handleDragPeriodChangeStart"
+            />
+          </div>
+          <div>
+            <div class="mb-1 text-sm font-medium">新退宿日期</div>
+            <DatePicker
+              :value="dragPeriodChangeEnd ? dayjs(dragPeriodChangeEnd) : undefined"
+              class="w-full"
+              :allow-clear="false"
+              @change="handleDragPeriodChangeEnd"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div class="mb-1 text-sm font-medium">调整原因</div>
+          <TextArea
+            v-model:value="dragPeriodChangeReason"
+            :rows="3"
+            :maxlength="255"
+            placeholder="请填写日期调整原因"
+            show-count
+          />
+        </div>
+
+        <div
+          v-if="dragPeriodChangeConflicts.length > 0"
+          class="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+        >
+          新的住宿期与该床位上的
+          {{
+            dragPeriodChangeConflicts
+              .map((item) => item.guestName || '未命名住宿人')
+              .join('、')
+          }}
+          冲突，请调整日期后再保存。
+        </div>
+        <div v-else class="text-muted-foreground rounded-lg bg-blue-50 p-3 text-xs dark:bg-blue-950/30">
+          床位保持不变，仅调整入住/退宿日期；取消将撤销刚才在日历上的拖动。
         </div>
       </div>
     </Modal>
@@ -1882,13 +2183,10 @@ onBeforeUnmount(() => {
     >
       <Spin :spinning="transferLoading">
         <div v-if="selectedOrder" class="space-y-5">
-          <div
-            class="rounded-lg border bg-gray-50 p-3 text-sm dark:bg-gray-900"
-          >
+          <div class="rounded-lg border bg-gray-50 p-3 text-sm dark:bg-gray-900">
             <strong>{{ selectedOrder.userName || '未填写住客' }}</strong>
             <div class="text-muted-foreground mt-1 text-xs">
-              当前 {{ getOrderRoom(selectedOrder)?.roomAlias || '未知房间' }}，
-              住宿期
+              当前 {{ getOrderRoom(selectedOrder)?.roomAlias || '未知房间' }}， 住宿期
               {{ dayjs(selectedOrder.startTime).format('YYYY-MM-DD') }} 至
               {{ dayjs(selectedOrder.endTime).format('YYYY-MM-DD') }}
             </div>
@@ -1940,28 +2238,48 @@ onBeforeUnmount(() => {
             />
           </div>
 
-          <div
-            class="text-muted-foreground rounded-lg bg-blue-50 p-3 text-xs dark:bg-blue-950/30"
-          >
+          <div class="text-muted-foreground rounded-lg bg-blue-50 p-3 text-xs dark:bg-blue-950/30">
             生效日前保留原床位；从生效日开始切换到目标床位，历史记录不会覆盖。
           </div>
         </div>
       </Spin>
     </Modal>
 
+    <Modal
+      v-model:open="draftReasonDialogOpen"
+      title="填写日期调整原因"
+      ok-text="提交"
+      cancel-text="继续调整"
+      :confirm-loading="savingDrafts"
+      @ok="submitPendingDrafts"
+    >
+      <div class="grid gap-4">
+        <template v-for="draft in pendingAllocationDrafts" :key="draft.guest.id">
+          <div v-if="isDraftPeriodChanged(draft)">
+            <div class="mb-1 flex items-center justify-between gap-3 text-sm font-medium">
+              <span>{{ draft.guest.userName || '未填写住客' }}</span>
+              <span class="text-destructive text-xs">
+                {{ draft.startDate }} 至 {{ draft.endDate }}
+              </span>
+            </div>
+            <TextArea
+              v-model:value="draftReasons[draft.guest.id]"
+              :maxlength="255"
+              :rows="2"
+              placeholder="请填写偏离审批住宿日期的原因"
+            />
+          </div>
+        </template>
+      </div>
+    </Modal>
+
     <div ref="schedulerPageRef" class="scheduler-page">
-      <Card
-        class="scheduler-hero shrink-0"
-        :body-style="{ padding: '16px 20px' }"
-      >
+      <Card class="scheduler-hero shrink-0" :body-style="{ padding: '16px 20px' }">
         <div class="scheduler-hero__main">
           <div class="flex min-w-0 items-center gap-3">
             <Image.PreviewGroup v-if="currentArea?.images?.length">
               <div class="scheduler-hero__photo">
-                <Image
-                  :alt="`${currentArea.areaName}区域照片`"
-                  :src="currentArea.images[0]"
-                />
+                <Image :alt="`${currentArea.areaName}区域照片`" :src="currentArea.images[0]" />
                 <span v-if="currentArea.images.length > 1">
                   +{{ currentArea.images.length - 1 }}
                 </span>
@@ -1978,9 +2296,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <h2 class="text-foreground m-0 text-xl font-semibold">
-                  排房管理
-                </h2>
+                <h2 class="text-foreground m-0 text-xl font-semibold">排房管理</h2>
                 <Tag v-if="currentArea?.timeZone" color="blue">
                   {{ currentArea.timeZone }}
                 </Tag>
@@ -2040,11 +2356,7 @@ onBeforeUnmount(() => {
       </Card>
 
       <section class="scheduler-overview shrink-0" aria-label="当前楼栋概览">
-        <div
-          v-for="stat in statCards"
-          :key="stat.label"
-          class="scheduler-overview__item"
-        >
+        <div v-for="stat in statCards" :key="stat.label" class="scheduler-overview__item">
           <div class="scheduler-overview__icon">
             <IconifyIcon :icon="stat.icon" :size="18" />
           </div>
@@ -2110,10 +2422,7 @@ onBeforeUnmount(() => {
               placeholder="搜索房间 / 编号"
             >
               <template #prefix>
-                <IconifyIcon
-                  icon="lucide:search"
-                  class="text-muted-foreground"
-                />
+                <IconifyIcon icon="lucide:search" class="text-muted-foreground" />
               </template>
             </Input>
             <Select
@@ -2132,29 +2441,18 @@ onBeforeUnmount(() => {
               placeholder="全部状态"
               :options="statusOptions"
             />
-            <Button
-              v-if="canViewPendingOrders"
-              type="primary"
-              ghost
-              class="scheduler-pending-button"
-              aria-label="打开待分配住宿人面板"
-              @click="openPendingOrders"
-            >
-              <IconifyIcon
-                :icon="
-                  pendingPanelCollapsed
-                    ? 'lucide:panel-right-open'
-                    : 'lucide:panel-right-close'
-                "
-                :size="16"
-              />
-              <span class="scheduler-pending-button__label">
-                待分配住宿人
-              </span>
-              <span class="scheduler-pending-count">{{
-                pendingGuestCount
-              }}</span>
-            </Button>
+            <template v-if="pendingDraftCount">
+              <Button @click="clearPendingDrafts">清空草稿</Button>
+              <Tooltip v-if="hasBlockingConflicts" title="存在冲突床位的草稿，请先调整后再保存">
+                <Button danger :loading="savingDrafts" @click="openDraftSave">
+                  <IconifyIcon icon="lucide:triangle-alert" :size="14" />
+                  {{ conflictedDrafts.length }} 条冲突，无法保存
+                </Button>
+              </Tooltip>
+              <Button v-else type="primary" :loading="savingDrafts" @click="openDraftSave">
+                保存排房 ({{ pendingDraftCount }})
+              </Button>
+            </template>
             <Tooltip title="刷新排房数据">
               <Button
                 class="scheduler-refresh-button"
@@ -2170,44 +2468,27 @@ onBeforeUnmount(() => {
 
         <div class="scheduler-legend">
           <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <span
-              v-for="meta in calendarLegend"
-              :key="meta.status"
-              class="scheduler-legend__item"
-            >
+            <span v-for="meta in calendarLegend" :key="meta.status" class="scheduler-legend__item">
               <i :style="{ backgroundColor: meta.color }"></i>
               {{ meta.label }}
+            </span>
+            <span v-if="pendingDraftCount" class="scheduler-legend__item">
+              <i class="scheduler-legend__draft-dot"></i>
+              草稿待保存
             </span>
           </div>
           <div class="scheduler-hint">
             <IconifyIcon icon="lucide:mouse-pointer-2" :size="14" />
             <template v-if="canManageSchedule">
-              拖动卡片调房，点击空白床位安排入住
+              首次排房先拖入草稿；可拖动或拉伸虚线卡片调整床位和日期，最后统一保存
             </template>
             <template v-else>当前为只读模式，可点击排房卡片查看详情</template>
           </div>
         </div>
 
         <div class="scheduler-workbench">
-          <div
-            class="scheduler-calendar-wrap"
-            :class="{ 'is-candidate-dragging': draggingGuest }"
-            @dragover="handleCandidateDragOver"
-            @drop="handleCandidateDrop"
-          >
-            <div v-if="draggingGuest" class="scheduler-drop-guide">
-              <span class="scheduler-drop-guide__icon">
-                <IconifyIcon icon="lucide:mouse-pointer-click" :size="17" />
-              </span>
-              <span>
-                正在安排 <strong>{{ draggingGuest.userName }}</strong>
-                · 放到具体床位与入住日期
-              </span>
-            </div>
-            <Spin
-              :classes="{ root: 'scheduler-spin' }"
-              :spinning="loading"
-            >
+          <div class="scheduler-calendar-wrap" :class="{ 'is-candidate-dragging': draggingGuest }">
+            <Spin :classes="{ root: 'scheduler-spin' }" :spinning="loading">
               <Empty
                 v-if="!selectedBuildId && !loading"
                 description="请选择区域和楼栋查看排房管理"
@@ -2222,16 +2503,46 @@ onBeforeUnmount(() => {
                 "
                 class="scheduler-empty"
               />
-              <div
-                ref="calendarRef"
-                class="ec-scheduler"
-                :class="{
-                  'ec-scheduler--event-dragging': isCalendarEventDragging,
-                  'ec-scheduler--hidden': !selectedBuildId,
-                }"
+              <ResourceTimelineScheduler
+                ref="schedulerRef"
                 :style="{ '--past-days': pastDaysInWindow }"
-                @wheel="handleCalendarWheel"
-              ></div>
+                :resources="calendarResources"
+                :events="calendarEvents"
+                :date="calendarViewDate"
+                :duration-days="calendarDurationDays"
+                :highlighted-dates="[areaToday]"
+                :editable="canManageSchedule"
+                :hidden="!selectedBuildId"
+                :event-dragging="isCalendarEventDragging"
+                :external-dragging="Boolean(draggingGuest)"
+                :resource-label-content="renderResourceLabel"
+                :event-content="renderEventContent"
+                :day-header-format="formatCalendarDayHeader"
+                @event-drag-start="handleEventDragStart"
+                @event-drag-stop="handleEventDragStop"
+                @event-drop="handleEventDrop"
+                @event-resize="handleEventResize"
+                @date-click="handleSlotSelect"
+                @event-click="handleEventClick"
+                @external-dragover="handleCandidateDragOver"
+                @external-drop="handleCandidateDrop"
+              >
+                <template #drag-overlay>
+                  <div v-if="draggingGuest" class="scheduler-drop-guide">
+                    <span class="scheduler-drop-guide__icon">
+                      <IconifyIcon icon="lucide:mouse-pointer-click" :size="17" />
+                    </span>
+                    <span>
+                      正在安排 <strong>{{ draggingGuest.userName }}</strong>
+                      <template v-if="pendingGuestDropPreview">
+                        · {{ pendingGuestDropPreview.start }} 至 {{ pendingGuestDropPreview.end }} ·
+                        {{ pendingGuestDropPreview.roomName }}
+                      </template>
+                      <template v-else>· 放到具体床位与入住日期</template>
+                    </span>
+                  </div>
+                </template>
+              </ResourceTimelineScheduler>
             </Spin>
           </div>
 
@@ -2248,24 +2559,16 @@ onBeforeUnmount(() => {
                   <span>{{ pendingGuestCount }}</span>
                 </div>
               </div>
-              <Tooltip
-                :title="
-                  pendingPanelCollapsed ? '展开待分配面板' : '收起待分配面板'
-                "
-              >
+              <Tooltip :title="pendingPanelCollapsed ? '展开待分配面板' : '收起待分配面板'">
                 <Button
                   type="text"
                   class="pending-panel__toggle"
-                  :aria-label="
-                    pendingPanelCollapsed ? '展开待分配面板' : '收起待分配面板'
-                  "
+                  :aria-label="pendingPanelCollapsed ? '展开待分配面板' : '收起待分配面板'"
                   @click="openPendingOrders"
                 >
                   <IconifyIcon
                     :icon="
-                      pendingPanelCollapsed
-                        ? 'lucide:panel-right-open'
-                        : 'lucide:panel-right-close'
+                      pendingPanelCollapsed ? 'lucide:panel-right-open' : 'lucide:panel-right-close'
                     "
                     :size="17"
                   />
@@ -2282,20 +2585,29 @@ onBeforeUnmount(() => {
                   placeholder="搜索姓名、订单或申请组"
                 >
                   <template #prefix>
-                    <IconifyIcon
-                      icon="lucide:search"
-                      class="text-muted-foreground"
-                    />
+                    <IconifyIcon icon="lucide:search" class="text-muted-foreground" />
                   </template>
                 </Input>
               </div>
+
+              <Button
+                v-if="canManageSchedule && unassignedPendingGuestCount > 0"
+                class="pending-panel__quick-add-all"
+                size="small"
+                @click="quickAddAllPendingGuests"
+              >
+                <IconifyIcon icon="lucide:zap" :size="14" />
+                一键全部加入日历 ({{ unassignedPendingGuestCount }})
+              </Button>
 
               <div class="pending-panel__body">
                 <Empty
                   v-if="visiblePendingGuests.length === 0"
                   :image="Empty.PRESENTED_IMAGE_SIMPLE"
                   :description="
-                    pendingGuestCount ? '没有匹配的住宿人' : '暂无待分配住宿人'
+                    pendingDraftCount
+                      ? '待分配人员已加入草稿，可在日历中继续调整'
+                      : '暂无待分配住宿人'
                   "
                   class="pending-panel__empty"
                 />
@@ -2305,8 +2617,9 @@ onBeforeUnmount(() => {
                     :key="guest.id"
                     draggable="true"
                     class="pending-guest"
+                    :class="{ 'pending-guest--drafted': getPendingDraft(guest.id) }"
                     @dragstart="startPendingGuestDrag(guest, $event)"
-                    @dragend="handleCandidateDragEnd"
+                    @dragend="handleCandidateDragEnd($event)"
                   >
                     <div class="pending-guest__main">
                       <span class="pending-guest__avatar">
@@ -2315,9 +2628,15 @@ onBeforeUnmount(() => {
                       <div class="min-w-0 flex-1">
                         <div class="pending-guest__name">
                           <strong>{{ guest.userName }}</strong>
-                          <span>{{
-                            getRequestedRoomTypeLabel(guest.requestedRoomType)
-                          }}</span>
+                          <span>{{ getRequestedRoomTypeLabel(guest.requestedRoomType) }}</span>
+                          <Tag
+                            v-if="getPendingDraft(guest.id)"
+                            color="blue"
+                            class="pending-guest__badge"
+                          >
+                            <IconifyIcon icon="lucide:check" :size="11" />
+                            已加入日历
+                          </Tag>
                         </div>
                         <div class="pending-guest__order">
                           {{ guest.orderSerial || '暂无订单号' }}
@@ -2331,19 +2650,37 @@ onBeforeUnmount(() => {
                     </div>
                     <div class="pending-guest__period">
                       <IconifyIcon icon="lucide:calendar-range" :size="13" />
-                      <span>{{ guest.plannedStartDate }} 至
-                        {{ guest.plannedEndDate }}</span>
+                      <span>{{ guest.plannedStartDate }} 至 {{ guest.plannedEndDate }}</span>
                     </div>
                     <div class="pending-guest__footer">
-                      <span v-if="guest.requestGroupNo">组 {{ guest.requestGroupNo }}</span>
-                      <span v-else>拖到床位和日期即可安排</span>
-                      <Button
-                        type="link"
-                        size="small"
-                        @click="openPendingGuestAllocation(guest)"
-                      >
-                        直接安排
-                      </Button>
+                      <template v-if="getPendingDraft(guest.id)">
+                        <span
+                          class="pending-guest__draft-status"
+                          :class="{
+                            'pending-guest__draft-status--conflict': isDraftConflicted(
+                              getPendingDraft(guest.id)!
+                            ),
+                          }"
+                        >
+                          {{ isDraftConflicted(getPendingDraft(guest.id)!) ? '⚠ 冲突：' : '草稿：' }}
+                          {{ getPendingDraftTarget(getPendingDraft(guest.id)!) }}
+                        </span>
+                        <Button type="link" size="small" @click="removePendingDraft(guest.id)">
+                          撤销草稿
+                        </Button>
+                      </template>
+                      <template v-else>
+                        <span v-if="guest.requestGroupNo">组 {{ guest.requestGroupNo }}</span>
+                        <span v-else>拖到床位和日期即可安排</span>
+                        <span class="pending-guest__quick-actions">
+                          <Button type="link" size="small" @click="quickAddGuestToCalendar(guest)">
+                            一键加入日历
+                          </Button>
+                          <Button type="link" size="small" @click="openPendingGuestAllocation(guest)">
+                            直接安排
+                          </Button>
+                        </span>
+                      </template>
                     </div>
                   </article>
                 </template>
@@ -2382,8 +2719,7 @@ onBeforeUnmount(() => {
 .scheduler-hero {
   overflow: hidden;
   border-color: hsl(var(--border) / 70%);
-  background:
-    radial-gradient(circle at 0 0, hsl(var(--primary) / 8%), transparent 32%),
+  background: radial-gradient(circle at 0 0, hsl(var(--primary) / 8%), transparent 32%),
     hsl(var(--card));
 }
 
@@ -2610,6 +2946,11 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, currentcolor 7%, transparent);
 }
 
+.scheduler-legend__draft-dot {
+  background: repeating-linear-gradient(-45deg, #2563eb, #2563eb 3px, #dbeafe 3px, #dbeafe 6px);
+  border: 1px dashed #2563eb;
+}
+
 .scheduler-hint {
   display: flex;
   align-items: center;
@@ -2664,9 +3005,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, hsl(var(--muted)) 18%, hsl(var(--card)));
   border-left: 1px solid hsl(var(--border) / 85%);
   box-shadow: -5px 0 14px rgb(15 23 42 / 4%);
-  transition:
-    width 180ms ease,
-    min-width 180ms ease;
+  transition: width 180ms ease, min-width 180ms ease;
 }
 
 .pending-panel--collapsed {
@@ -2762,10 +3101,7 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
   cursor: grab;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .pending-guest + .pending-guest {
@@ -2866,6 +3202,45 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pending-guest__draft-status {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.pending-guest__draft-status--conflict {
+  color: #dc2626;
+}
+
+.pending-guest--drafted {
+  background: hsl(var(--muted) / 45%);
+  border-style: dashed;
+  opacity: 0.72;
+}
+
+.pending-guest--drafted:hover {
+  opacity: 1;
+}
+
+.pending-guest__badge {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px !important;
+  line-height: 16px !important;
+}
+
+.pending-guest__quick-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.pending-panel__quick-add-all {
+  flex: none;
+  margin: 0 10px 8px;
 }
 
 .pending-guest__footer :deep(.ant-btn) {
@@ -2969,592 +3344,6 @@ onBeforeUnmount(() => {
   left: 50%;
   margin: 0;
   transform: translate(-50%, -50%);
-}
-
-.ec-scheduler {
-  height: 100%;
-  padding: 0;
-  --scheduler-room-width: 208px;
-  --scheduler-row-height: 52px;
-  --scheduler-floor-row-height: 52px;
-  --scheduler-sidebar-scroll-spacer: 0px;
-  --scheduler-sidebar-width: 324px;
-  --scheduler-slot-width: 48px;
-  --scheduler-day-width: 48px;
-  --ec-accent-color: hsl(var(--primary) / 35%);
-  --ec-bg-color: hsl(var(--card));
-  --ec-border-color: hsl(var(--border) / 58%);
-  --ec-highlight-color: hsl(var(--primary) / 10%);
-  --ec-text-color: hsl(var(--foreground));
-  --ec-today-bg-color: hsl(var(--primary) / 8%);
-}
-
-.ec-scheduler--hidden {
-  visibility: hidden;
-}
-
-.ec-scheduler :deep(.ec) {
-  max-height: 100%;
-  color: hsl(var(--foreground));
-  font-family: inherit;
-  font-size: 12px;
-}
-
-.ec-scheduler :deep(.ec-toolbar) {
-  display: none;
-}
-
-.ec-scheduler :deep(.ec-main) {
-  max-height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  border: 0;
-}
-
-.ec-scheduler :deep(.ec-sidebar) {
-  position: relative;
-  z-index: 4;
-  width: var(--scheduler-sidebar-width);
-  min-width: var(--scheduler-sidebar-width);
-  color: hsl(var(--foreground));
-  background: hsl(var(--background));
-  border-inline-end: 1px solid hsl(var(--border) / 80%);
-  isolation: isolate;
-  transition: box-shadow 160ms ease;
-}
-
-/* 仅在右侧时间轴滚动到固定列下方时显出分层阴影。 */
-.ec-scheduler :deep(.ec-container > .ec-sidebar::after) {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  right: -10px;
-  bottom: 0;
-  width: 10px;
-  background: linear-gradient(to right, rgb(15 23 42 / 14%), transparent);
-  content: '';
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease;
-}
-
-.ec-scheduler.ec-scheduler--sidebar-elevated :deep(.ec-sidebar) {
-  box-shadow: 8px 0 18px -11px hsl(var(--foreground) / 34%);
-}
-
-.ec-scheduler.ec-scheduler--sidebar-elevated
-  :deep(.ec-container > .ec-sidebar::after) {
-  opacity: 1;
-}
-
-.ec-scheduler :deep(.ec-sidebar .ec-content::after) {
-  width: 1px;
-  flex: 0 0 var(--scheduler-sidebar-scroll-spacer);
-  content: '';
-}
-
-.ec-scheduler :deep(.ec-header .ec-sidebar) {
-  position: sticky;
-  z-index: 5;
-  left: 0;
-  isolation: isolate;
-  min-height: 48px;
-  background:
-    linear-gradient(
-      to right,
-      transparent calc(var(--scheduler-room-width) - 1px),
-      hsl(var(--border) / 65%) calc(var(--scheduler-room-width) - 1px),
-      hsl(var(--border) / 65%) var(--scheduler-room-width),
-      transparent var(--scheduler-room-width)
-    ),
-    color-mix(in srgb, hsl(var(--muted)) 32%, hsl(var(--card)));
-  box-shadow: none;
-}
-
-.ec-scheduler :deep(.ec-header .ec-sidebar::after) {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 18px;
-  color: hsl(var(--foreground) / 82%);
-  font-size: 12px;
-  font-weight: 650;
-  content: '房间信息';
-  transform: translateY(-50%);
-}
-
-.ec-scheduler :deep(.ec-header .ec-sidebar::before) {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: calc(var(--scheduler-room-width) + 18px);
-  color: hsl(var(--foreground) / 82%);
-  font-size: 12px;
-  font-weight: 650;
-  content: '床位';
-  transform: translateY(-50%);
-}
-
-.ec-scheduler :deep(.ec-header) {
-  z-index: 7;
-  color: hsl(var(--muted-foreground));
-  background: hsl(var(--muted) / 30%);
-  box-shadow: 0 2px 8px rgb(15 23 42 / 4%);
-}
-
-.ec-scheduler :deep(.ec-day-head) {
-  min-height: 48px;
-  padding-top: 8px;
-  font-size: 12px;
-  font-weight: 550;
-  text-align: center;
-}
-
-.ec-scheduler :deep(.ec-day-head time) {
-  display: block;
-  color: hsl(var(--muted-foreground));
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 16px;
-  white-space: pre-line;
-}
-
-.ec-scheduler :deep(.ec-day-head.ec-sat),
-.ec-scheduler :deep(.ec-day-head.ec-sun) {
-  background: hsl(var(--muted) / 34%);
-}
-
-.ec-scheduler :deep(.ec-day-head.ec-today) {
-  color: hsl(var(--primary));
-  background: hsl(var(--primary) / 10%);
-  box-shadow: inset 0 -2px 0 hsl(var(--primary) / 65%);
-}
-
-.ec-scheduler :deep(.ec-day-head.ec-today time) {
-  color: hsl(var(--primary));
-  font-weight: 700;
-}
-
-.ec-scheduler :deep(.ec-day.ec-today:not(.ec-highlight)) {
-  background-color: transparent;
-}
-
-.ec-scheduler :deep(.ec-day.ec-highlight) {
-  background-color: var(--ec-today-bg-color);
-}
-
-.ec-scheduler :deep(.ec-col-group),
-.ec-scheduler :deep(.ec-col-head[style*='--ec-col-group-span']) {
-  grid-column: span var(--ec-col-group-span);
-  min-height: 30px;
-  padding-block: 6px;
-  color: hsl(var(--foreground) / 75%);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  background: hsl(var(--muted) / 42%);
-}
-
-.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource) {
-  position: relative;
-  align-items: center;
-  overflow: visible;
-  padding: 0;
-  background: hsl(var(--card));
-  border-block-end: 0;
-  font-size: 12px;
-  text-align: left;
-}
-
-.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource),
-.ec-scheduler :deep(.ec-timeline .ec-body .ec-days) {
-  min-height: var(--scheduler-row-height);
-  max-height: var(--scheduler-row-height);
-  flex: 0 0 var(--scheduler-row-height) !important;
-  box-sizing: border-box;
-}
-
-.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource:has(.calendar-floor-row)),
-.ec-scheduler
-  :deep(.ec-timeline .ec-body .ec-days.calendar-timeline-row--floor) {
-  min-height: var(--scheduler-floor-row-height);
-  max-height: var(--scheduler-floor-row-height);
-  flex: 0 0 var(--scheduler-floor-row-height) !important;
-}
-
-.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource:last-child),
-.ec-scheduler :deep(.ec-timeline .ec-body .ec-days:last-child) {
-  flex-grow: 0 !important;
-}
-
-/* 时间轴与资源列的滚动内容均以这条线收尾，避免末行底边缺失。 */
-.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-content),
-.ec-scheduler :deep(.ec-timeline .ec-body .ec-content) {
-  box-shadow: inset 0 -1px 0 hsl(var(--border) / 90%);
-}
-
-.ec-scheduler :deep(.ec-timeline .ec-sidebar .ec-resource > span) {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  padding-top: 0;
-}
-
-.ec-scheduler :deep(.calendar-resource-row) {
-  position: relative;
-  display: grid;
-  grid-template-columns: var(--scheduler-room-width) minmax(0, 1fr);
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  align-items: center;
-  background: hsl(var(--card));
-}
-
-.ec-scheduler :deep(.calendar-resource-row--even) {
-  background: color-mix(in srgb, hsl(var(--muted)) 16%, hsl(var(--card)));
-}
-
-/* 首床位行承载跨行房间单元格，始终覆盖后续床位行的房间列。 */
-.ec-scheduler
-  :deep(.ec-sidebar .ec-resource:has(.calendar-resource-row--first)) {
-  z-index: 1;
-}
-
-.ec-scheduler :deep(.calendar-room-cell) {
-  position: relative;
-  display: flex;
-  height: 100%;
-  min-width: 0;
-  grid-column: 1;
-  flex-direction: column;
-  justify-content: center;
-  padding: 7px 12px 7px 14px;
-  background: color-mix(in srgb, hsl(var(--muted)) 25%, hsl(var(--card)));
-  border-bottom: 1px solid hsl(var(--border) / 36%);
-  border-right: 1px solid hsl(var(--border) / 65%);
-}
-
-.ec-scheduler :deep(.calendar-room-cell--primary) {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  left: 0;
-  width: var(--scheduler-room-width);
-  /* 资源列表重建时立即保持跨床位高度，避免等待布局同步而闪现为单行。 */
-  height: calc(var(--scheduler-row-height) * var(--room-row-span));
-  border-bottom-color: hsl(var(--border) / 90%);
-  box-shadow: inset 3px 0 0 hsl(var(--primary) / 55%);
-}
-
-.ec-scheduler :deep(.calendar-resource-row--last .calendar-room-cell) {
-  border-bottom: 1px solid hsl(var(--border) / 90%);
-}
-
-.ec-scheduler :deep(.calendar-resource-row--even .calendar-room-cell) {
-  background: color-mix(in srgb, hsl(var(--muted)) 38%, hsl(var(--card)));
-}
-
-.ec-scheduler :deep(.calendar-room-cell__top) {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 7px;
-}
-
-.ec-scheduler :deep(.calendar-room-cell__top strong) {
-  overflow: hidden;
-  color: hsl(var(--foreground));
-  font-size: 12px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ec-scheduler :deep(.calendar-room-cell__meta) {
-  margin-top: 4px;
-  color: hsl(var(--muted-foreground));
-  font-size: 10px;
-  line-height: 1;
-}
-
-.ec-scheduler :deep(.calendar-bed-slot) {
-  display: flex;
-  height: 100%;
-  grid-column: 2;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  color: hsl(var(--muted-foreground));
-  background: hsl(var(--card));
-  border-bottom: 1px solid hsl(var(--border) / 55%);
-}
-
-.ec-scheduler :deep(.calendar-resource-row--even .calendar-bed-slot) {
-  background: color-mix(in srgb, hsl(var(--muted)) 16%, hsl(var(--card)));
-}
-
-.ec-scheduler :deep(.calendar-resource-row--last .calendar-bed-slot) {
-  border-bottom-color: hsl(var(--border) / 90%);
-}
-
-.ec-scheduler :deep(.calendar-floor-row) {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  background: color-mix(in srgb, hsl(var(--primary)) 7%, hsl(var(--card)));
-  border-bottom: 1px solid hsl(var(--primary) / 18%);
-}
-
-.ec-scheduler--event-dragging :deep(.calendar-floor-row) {
-  background: hsl(var(--muted) / 70%);
-  filter: grayscale(1);
-  opacity: 0.64;
-}
-
-.ec-scheduler--event-dragging :deep(.ec-body .calendar-timeline-row--floor) {
-  background: hsl(var(--muted) / 70%);
-}
-
-.ec-scheduler--event-dragging :deep(.calendar-floor-toggle) {
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.ec-scheduler :deep(.calendar-floor-toggle) {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  color: hsl(var(--foreground));
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-}
-
-.ec-scheduler :deep(.calendar-floor-toggle__chevron) {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-  color: hsl(var(--primary));
-  background: hsl(var(--primary) / 10%);
-  border-radius: 7px;
-}
-
-.ec-scheduler :deep(.calendar-floor-toggle__chevron),
-.ec-scheduler :deep(.calendar-bed-slot__icon) {
-  align-self: center;
-}
-
-.ec-scheduler :deep(.calendar-floor-toggle__chevron > *),
-.ec-scheduler :deep(.calendar-bed-slot__icon > *) {
-  display: block;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  vertical-align: 0;
-}
-
-/* Iconify 的 SVG 在床位徽标中会保留基线偏移，显式上移至徽标几何中心。 */
-.ec-scheduler :deep(.calendar-floor-toggle__chevron > *),
-.ec-scheduler :deep(.calendar-bed-slot__icon > *) {
-  transform: translateY(-4px);
-}
-
-.ec-scheduler :deep(.calendar-floor-toggle strong) {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ec-scheduler :deep(.calendar-floor-toggle__meta) {
-  margin-left: auto;
-  color: hsl(var(--muted-foreground));
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.ec-scheduler :deep(.calendar-bed-slot__info) {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.ec-scheduler :deep(.calendar-bed-slot__info strong) {
-  color: hsl(var(--foreground));
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
-}
-
-.ec-scheduler :deep(.calendar-bed-slot__info span) {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  line-height: 1;
-}
-
-.ec-scheduler :deep(.calendar-bed-slot__info span::before) {
-  width: 5px;
-  height: 5px;
-  background: #10b981;
-  border-radius: 50%;
-  content: '';
-}
-
-.ec-scheduler :deep(.calendar-bed-slot__info .is-disabled::before) {
-  background: #94a3b8;
-}
-
-.ec-scheduler :deep(.calendar-bed-slot__icon) {
-  display: inline-flex;
-  width: 26px;
-  height: 26px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-  color: hsl(var(--primary));
-  background: hsl(var(--primary) / 8%);
-  border: 1px solid hsl(var(--primary) / 14%);
-  border-radius: 8px;
-}
-
-.ec-scheduler :deep(.ec-body) {
-  position: relative;
-}
-
-.ec-scheduler :deep(.ec-body::after) {
-  display: none;
-}
-
-/* 历史日期遮罩属于完整滚动内容，而不是仅覆盖当前可视窗口。 */
-.ec-scheduler :deep(.ec-body .ec-content::after) {
-  position: absolute;
-  z-index: 0;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: calc(var(--past-days) * var(--scheduler-day-width));
-  background: rgb(148 163 184 / 7%);
-  box-shadow: inset -1px 0 0 rgb(100 116 139 / 14%);
-  content: '';
-  pointer-events: none;
-}
-
-.ec-scheduler :deep(.ec-event) {
-  --calendar-event-status-color: #64748b;
-  top: calc((var(--scheduler-row-height) - 40px) / 2 - 1px);
-  min-height: 40px;
-  block-size: 40px;
-  overflow: hidden;
-  border-color: color-mix(
-    in srgb,
-    var(--calendar-event-status-color) 32%,
-    hsl(var(--border))
-  );
-  border-left-color: var(--calendar-event-status-color);
-  border-width: 1px 1px 1px 4px;
-  border-style: solid;
-  border-radius: 8px;
-  box-shadow: 0 2px 5px rgb(15 23 42 / 10%);
-  cursor: pointer;
-  transition:
-    filter 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.ec-scheduler :deep(.calendar-event--status-0) {
-  --calendar-event-status-color: #d97706;
-}
-
-.ec-scheduler :deep(.calendar-event--status-1) {
-  --calendar-event-status-color: #2563eb;
-}
-
-.ec-scheduler :deep(.calendar-event--status-2) {
-  --calendar-event-status-color: #94a3b8;
-}
-
-.ec-scheduler :deep(.calendar-event--status-3) {
-  --calendar-event-status-color: #059669;
-}
-
-.ec-scheduler :deep(.calendar-event--status-4) {
-  --calendar-event-status-color: #7c3aed;
-}
-
-.ec-scheduler :deep(.ec-event:hover) {
-  z-index: 5;
-  filter: saturate(1.08);
-  box-shadow: 0 3px 9px rgb(15 23 42 / 16%);
-}
-
-.ec-scheduler :deep(.calendar-event-content) {
-  position: relative;
-  display: flex;
-  height: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 9px;
-  line-height: 30px;
-}
-
-.ec-scheduler :deep(.calendar-event-content::before) {
-  position: absolute;
-  z-index: 0;
-  inset: 0 auto 0 0;
-  width: var(--history-ratio);
-  background: rgb(248 250 252 / 48%);
-  content: '';
-  pointer-events: none;
-}
-
-.ec-scheduler :deep(.calendar-event-content > *) {
-  position: relative;
-  z-index: 1;
-}
-
-.ec-scheduler :deep(.calendar-event-content strong) {
-  overflow: hidden;
-  font-size: 11px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ec-scheduler :deep(.calendar-event-content span) {
-  flex: none;
-  font-size: 10px;
-  opacity: 0.75;
-}
-
-.ec-scheduler :deep(.calendar-event--history) {
-  opacity: 0.58;
-  filter: saturate(0.55);
-}
-
-.ec-scheduler :deep(.calendar-event--locked) {
-  cursor: not-allowed;
-  filter: saturate(0.45);
 }
 
 .schedule-detail__hero {
