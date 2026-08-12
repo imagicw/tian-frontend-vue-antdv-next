@@ -144,6 +144,8 @@ function syncResourceRowHeights() {
     if (!timelineRow) return;
     const isFloorRow = Boolean(row.querySelector('.calendar-floor-row'));
     timelineRow.classList.toggle('calendar-timeline-row--floor', isFloorRow);
+    const isDisabledRow = Boolean(row.querySelector('.calendar-bed-slot--disabled'));
+    timelineRow.classList.toggle('calendar-timeline-row--disabled', isDisabledRow);
     for (const el of [timelineRow, row]) {
       el.style.setProperty('flex-basis', `${props.rowHeight}px`, 'important');
       el.style.setProperty('min-height', `${props.rowHeight}px`, 'important');
@@ -412,7 +414,7 @@ const wrapClasses = computed(() => ({
       ref="calendarRef"
       class="ec-scheduler"
       :class="{
-        'ec-scheduler--event-dragging': eventDragging,
+        'ec-scheduler--event-dragging': eventDragging || externalDragging,
         'ec-scheduler--hidden': hidden,
         'ec-scheduler--sidebar-elevated': isSidebarElevated,
       }"
@@ -755,6 +757,19 @@ const wrapClasses = computed(() => ({
   border-bottom-color: hsl(var(--border) / 90%);
 }
 
+/* 停用房间/床位的右侧时间轴通道用斜纹提示不能排房；左侧标签和楼层行沿用
+   原有纯色底，不额外置灰。斜纹透明度调高，避免遮住时间轴上的事件条。 */
+.ec-scheduler :deep(.ec-body .calendar-timeline-row--disabled) {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(203 213 225 / 50%),
+    rgb(203 213 225 / 50%) 6px,
+    rgb(241 245 249 / 50%) 6px,
+    rgb(241 245 249 / 50%) 12px
+  ) !important;
+  cursor: not-allowed;
+}
+
 .ec-scheduler :deep(.calendar-floor-row) {
   position: absolute;
   inset: 0;
@@ -765,14 +780,14 @@ const wrapClasses = computed(() => ({
   border-bottom: 1px solid hsl(var(--primary) / 18%);
 }
 
-.ec-scheduler--event-dragging :deep(.calendar-floor-row) {
-  background: hsl(var(--muted) / 70%);
-  filter: grayscale(1);
-  opacity: 0.64;
-}
-
-.ec-scheduler--event-dragging :deep(.ec-body .calendar-timeline-row--floor) {
-  background: hsl(var(--muted) / 70%);
+.ec-scheduler :deep(.ec-body .calendar-timeline-row--floor) {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(203 213 225 / 50%),
+    rgb(203 213 225 / 50%) 6px,
+    rgb(241 245 249 / 50%) 6px,
+    rgb(241 245 249 / 50%) 12px
+  );
 }
 
 .ec-scheduler--event-dragging :deep(.calendar-floor-toggle) {

@@ -40,9 +40,9 @@ import timezone from 'dayjs/plugin/timezone.js';
 import utc from 'dayjs/plugin/utc.js';
 
 import {
-  adjustPendingGuestPeriod,
   allocateDormBeds,
   changeDormStayPeriod,
+  correctRoomAllocationPeriod,
   getAreaSimpleList,
   getBuildInfo,
   getBuildSimpleList,
@@ -213,6 +213,7 @@ const dragPeriodChangeStart = ref('');
 const dragPeriodChangeEnd = ref('');
 const dragPeriodChangeReason = ref('');
 let dragPeriodChangeRevert: (() => void) | undefined;
+let periodChangeRevert: (() => void) | undefined;
 const TextArea = Input.TextArea;
 
 const canManageSchedule = computed(() => hasAccessByCodes(['dorm:room:update']));
@@ -457,7 +458,7 @@ const calendarEvents = computed<CalendarEvent[]>(() => {
   const preview = pendingGuestDropPreview.value;
   if (preview) {
     events.push({
-      backgroundColor: preview.isAvailable ? '#dbeafe' : '#fee2e2',
+      backgroundColor: preview.isAvailable ? '#dbeafe' : '#ef4444',
       classNames: [
         'calendar-event--drop-preview',
         preview.isAvailable
@@ -472,7 +473,7 @@ const calendarEvents = computed<CalendarEvent[]>(() => {
       resourceId: `bed-${preview.bedId}`,
       start: preview.start,
       startEditable: false,
-      textColor: preview.isAvailable ? '#1e40af' : '#991b1b',
+      textColor: preview.isAvailable ? '#1e40af' : '#ffffff',
       title: '待分配住宿人',
     });
   }
@@ -483,7 +484,7 @@ const calendarEvents = computed<CalendarEvent[]>(() => {
     // 两个互相冲突的草稿里排在前面的那个 depth 可能是 0（不挪位），但仍要标红。
     const conflicted = isDraftConflicted(draft);
     events.push({
-      backgroundColor: conflicted ? '#fee2e2' : '#dbeafe',
+      backgroundColor: conflicted ? '#ef4444' : '#dbeafe',
       classNames: [
         'calendar-event--pending-draft',
         ...(conflicted ? ['calendar-event--pending-draft-conflict'] : []),
@@ -497,7 +498,7 @@ const calendarEvents = computed<CalendarEvent[]>(() => {
       start: draft.startDate,
       startEditable: true,
       styles: getDraftConflictStyles(depth),
-      textColor: conflicted ? '#991b1b' : '#1e40af',
+      textColor: conflicted ? '#ffffff' : '#1e40af',
       title: draft.guest.userName || '待保存排房',
     });
   }
@@ -691,7 +692,13 @@ function renderResourceLabel({ resource }: any) {
   wrapper.style.setProperty('--room-row-span', String(Math.max(1, Number(props.bedCount) || 1)));
   if (props.roomFirst && room) {
     const roomCell = document.createElement('div');
-    roomCell.className = 'calendar-room-cell calendar-room-cell--primary';
+    roomCell.className = [
+      'calendar-room-cell',
+      'calendar-room-cell--primary',
+      room.status !== 0 ? 'calendar-room-cell--disabled' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
     const roomTop = document.createElement('div');
     roomTop.className = 'calendar-room-cell__top';
     const title = document.createElement('strong');
@@ -706,14 +713,16 @@ function renderResourceLabel({ resource }: any) {
   }
 
   const bedCell = document.createElement('div');
-  bedCell.className = 'calendar-bed-slot';
+  const bedAvailable = room?.status === 0 && bed?.status === 0;
+  bedCell.className = ['calendar-bed-slot', bedAvailable ? '' : 'calendar-bed-slot--disabled']
+    .filter(Boolean)
+    .join(' ');
   const bedIcon = createCalendarIcon('lucide:bed-single', 'calendar-bed-slot__icon');
   const bedInfo = document.createElement('div');
   bedInfo.className = 'calendar-bed-slot__info';
   const bedTitle = document.createElement('strong');
   bedTitle.textContent = bed?.bedCode || resource.title;
   const bedMeta = document.createElement('span');
-  const bedAvailable = room?.status === 0 && bed?.status === 0;
   bedMeta.className = bedAvailable ? 'is-enabled' : 'is-disabled';
   let bedStatusLabel = '可用';
   let bedStatusDescription = '床位可用';
@@ -814,9 +823,50 @@ function syncCompactLayout(width = schedulerPageRef.value?.clientWidth ?? 0) {
   }
 }
 
+// 调房/延期/纠错等操作在后端都是"作废旧片段 + 插入新片段"的追加式历史模型（同一住客、
+// 同一床位会产生多条 assignment 记录），如果按记录逐条渲染，日历上会显示成好几段连续的条，
+// 看起来像是新增了入住记录。这里把同一住客、同一床位上首尾相接（前一段的退宿日 = 后一段的
+// 入住日）的片段合并成一条日历事件，保证同一次住宿在日历上始终是一根连续的条。
+function mergeContiguousAssignments(
+  segments: DormApi.DormSubOrder[]
+): DormApi.DormSubOrder[] {
+  const groups = new Map<string, DormApi.DormSubOrder[]>();
+  for (const segment of segments) {
+    const key = `${segment.id}-${segment.bedId}`;
+    const group = groups.get(key);
+    if (group) group.push(segment);
+    else groups.set(key, [segment]);
+  }
+
+  const merged: DormApi.DormSubOrder[] = [];
+  for (const group of groups.values()) {
+    const sorted = [...group].sort((a, b) => dayjs(a.startTime).diff(dayjs(b.startTime)));
+    let current = sorted[0]!;
+    for (let i = 1; i < sorted.length; i++) {
+      const next = sorted[i]!;
+      if (!dayjs(next.startTime).isAfter(dayjs(current.endTime))) {
+        current = {
+          ...next,
+          plannedEndTime: next.plannedEndTime || current.plannedEndTime,
+          plannedStartTime: current.plannedStartTime || next.plannedStartTime,
+          startTime: current.startTime,
+        };
+      } else {
+        merged.push(current);
+        current = next;
+      }
+    }
+    merged.push(current);
+  }
+  return merged.map((order) => ({
+    ...order,
+    days: Math.max(1, dayjs(order.endTime).diff(dayjs(order.startTime), 'day')),
+  }));
+}
+
 function applyAllocationWorkbench(data: DormApi.RoomAllocationWorkbench) {
   allocationWorkbench.value = data;
-  rawEvents.value = data.rooms.flatMap((room) =>
+  const segments = data.rooms.flatMap((room) =>
     room.beds.flatMap((bed) =>
       bed.assignments.map((assignment) => ({
         assignmentId: assignment.id,
@@ -839,6 +889,7 @@ function applyAllocationWorkbench(data: DormApi.RoomAllocationWorkbench) {
       }))
     )
   );
+  rawEvents.value = mergeContiguousAssignments(segments);
 }
 
 async function fetchCalendarEvents() {
@@ -1025,7 +1076,7 @@ function confirmScheduleChange(title: string, content: string) {
   });
 }
 
-async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
+async function handleEventDrop({ event, newResource, revert }: any) {
   if (!canManageSchedule.value) {
     revertCalendarChange(revert);
     return;
@@ -1099,11 +1150,21 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
     revertCalendarChange(revert);
     return;
   }
-  const transferStart = dayjs(order.startTime).format('YYYY-MM-DD');
+  // 调房只改变生效日之后使用的床位，退宿日期不变，因此生效日必须落在
+  // [入住日, 退宿日) 之间；拖拽落点的日期即为期望的调房生效日（而不是拖拽前的原日期）。
+  const transferEffectiveDate = dayjs(event.start).format('YYYY-MM-DD');
   const transferEnd = dayjs(order.endTime).format('YYYY-MM-DD');
+  if (
+    dayjs(transferEffectiveDate).isBefore(dayjs(order.startTime), 'day') ||
+    !dayjs(transferEffectiveDate).isBefore(dayjs(transferEnd), 'day')
+  ) {
+    message.warning('调房生效日期需在该住客的入住日与退宿日之间，请重新拖拽或改用详情中的调房功能');
+    revertCalendarChange(revert);
+    return;
+  }
   const transferConflicts = getBedAssignmentConflicts(
     targetBed,
-    transferStart,
+    transferEffectiveDate,
     transferEnd,
     order.id
   );
@@ -1117,10 +1178,10 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
   }
 
   const confirmed = await confirmScheduleChange(
-    '确认整段调房？',
-    `${order.userName || '该住客'}将从入住首日开始调整至「${
+    '确认调房？',
+    `${order.userName || '该住客'}将自 ${transferEffectiveDate} 起调整至「${
       targetRoom.roomAlias || targetRoom.roomCode
-    } / ${targetBed.bedCode}」，原床位历史会保留。`
+    } / ${targetBed.bedCode}」，退宿日期不变，原床位历史会保留。`
   );
 
   if (!confirmed) {
@@ -1130,7 +1191,7 @@ async function handleEventDrop({ event, oldEvent, newResource, revert }: any) {
 
   try {
     await transferDormBed({
-      effectiveDate: dayjs(oldEvent.start || order.startTime).format('YYYY-MM-DD'),
+      effectiveDate: transferEffectiveDate,
       guestId: order.id,
       operationNo: `TRANSFER-${order.id}-${Date.now()}`,
       reason: '排房日历拖拽调房',
@@ -1189,7 +1250,13 @@ async function handleEventResize({ event, revert }: any) {
     revertCalendarChange(revert);
     return;
   }
-  openDragPeriodChange(order, newStart, newEnd, () => revertCalendarChange(revert));
+  if (newStart !== currentStart) {
+    // 日历未开启从起始边拉伸（eventResizableFromStart），理论上拉伸只会改变退宿日期；
+    // 万一触发了起始日变化，退回到“同床位改期”弹窗兜底，而不是套用只改 endDate 的接口。
+    openDragPeriodChange(order, newStart, newEnd, () => revertCalendarChange(revert));
+    return;
+  }
+  openPeriodChangeDialog(order, newEnd, () => revertCalendarChange(revert));
 }
 
 function handleSlotSelect({ date, resource, start }: any) {
@@ -1732,12 +1799,25 @@ async function openTransferDialog() {
   await loadTransferAvailability();
 }
 
-function openPeriodChangeDialog() {
-  if (!selectedOrder.value) return;
-  periodChangeEndDate.value =
-    selectedOrder.value.plannedEndTime || selectedOrder.value.endTime || '';
+// 拉伸事件时（拖拽日历条右边缘调整退宿日期）复用同一个“延期 / 提前退宿”弹窗，
+// 因为默认未开启 eventResizableFromStart，拉伸只会改变 endTime，与该弹窗的语义完全一致。
+function openPeriodChangeDialog(
+  order?: DormApi.DormSubOrder,
+  presetEndDate?: string,
+  revert?: () => void
+) {
+  const target = order ?? selectedOrder.value;
+  if (!target) return;
+  selectedOrder.value = target;
+  periodChangeEndDate.value = presetEndDate || target.plannedEndTime || target.endTime || '';
   periodChangeReason.value = '';
+  periodChangeRevert = revert;
   periodChangeOpen.value = true;
+}
+
+function cancelPeriodChangeDialog() {
+  periodChangeRevert?.();
+  periodChangeRevert = undefined;
 }
 
 function disablePeriodChangeEndDate(value: Dayjs) {
@@ -1766,8 +1846,11 @@ async function submitPeriodChange() {
     });
     message.success('住宿期已更新，床位安排已同步');
     periodChangeOpen.value = false;
+    periodChangeRevert = undefined;
     detailOpen.value = false;
     await fetchCalendarEvents();
+  } catch {
+    cancelPeriodChangeDialog();
   } finally {
     periodChangeSubmitting.value = false;
   }
@@ -1815,10 +1898,14 @@ async function submitDragPeriodChange() {
   }
   dragPeriodChangeSubmitting.value = true;
   try {
-    await adjustPendingGuestPeriod({
+    // 日历拖拽只能对已排房住宿人的“同床位”条目触发（见 handleEventDrop/handleEventResize
+    // 里的 order.status !== 1 校验），adjust-period 接口专用于未排房住宿人，
+    // 已排房住宿人的同床位日期修正必须走 correction（管理员纠错）接口，否则后端会以
+    // “住宿人已排房”拒绝请求。
+    await correctRoomAllocationPeriod({
       endDate: dragPeriodChangeEnd.value,
       guestId: order.id,
-      operationNo: `PERIOD-ADJUST-${order.id}-${Date.now()}`,
+      operationNo: `PERIOD-CORRECTION-${order.id}-${Date.now()}`,
       reason: dragPeriodChangeReason.value.trim(),
       startDate: dragPeriodChangeStart.value,
       version: order.guestVersion,
@@ -1950,7 +2037,7 @@ onBeforeUnmount(() => {
           <Button
             v-if="canManageSchedule && selectedOrder.status === 1"
             class="schedule-detail__action"
-            @click="openPeriodChangeDialog"
+            @click="openPeriodChangeDialog()"
           >
             <IconifyIcon icon="lucide:calendar-range" />
             延期 / 提前退宿
@@ -2056,6 +2143,7 @@ onBeforeUnmount(() => {
       :confirm-loading="periodChangeSubmitting"
       :ok-button-props="{ disabled: !canSubmitPeriodChange }"
       @ok="submitPeriodChange"
+      @cancel="cancelPeriodChangeDialog"
     >
       <div v-if="selectedOrder" class="space-y-5">
         <div class="rounded-lg border bg-gray-50 p-3 text-sm dark:bg-gray-900">

@@ -455,6 +455,7 @@ export const allocateDormBed = (data: DormApi.RoomAllocationAllocateData) =>
 export const allocateDormBeds = (data: DormApi.RoomAllocationBatchAllocateData) =>
   requestClient.post(`${BASE}/room-allocation/allocate-batch`, data);
 
+/** 调整待排住宿人的计划住宿日期（仅适用于尚未排房的住宿人） */
 export const adjustPendingGuestPeriod = (data: {
   endDate: string;
   guestId: number;
@@ -463,6 +464,16 @@ export const adjustPendingGuestPeriod = (data: {
   startDate: string;
   version?: number;
 }) => requestClient.post(`${BASE}/room-allocation/adjust-period`, data);
+
+/** 管理员纠错：已排房住宿人在同一床位上修正入住/退宿日期 */
+export const correctRoomAllocationPeriod = (data: {
+  endDate: string;
+  guestId: number;
+  operationNo: string;
+  reason: string;
+  startDate: string;
+  version?: number;
+}) => requestClient.post(`${BASE}/room-allocation/correction`, data);
 
 export const changeDormStayPeriod = (data: {
   endDate: string;
