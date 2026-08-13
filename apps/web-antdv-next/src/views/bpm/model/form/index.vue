@@ -9,11 +9,7 @@ import { onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { confirm, Page } from '@vben/common-ui';
-import {
-  BpmAutoApproveType,
-  BpmModelFormType,
-  BpmModelType,
-} from '@vben/constants';
+import { BpmModelFormType, BpmModelType } from '@vben/constants';
 import { useTabs } from '@vben/hooks';
 import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
@@ -84,18 +80,6 @@ const formData: any = ref({
   startDeptIds: [],
   managerUserIds: [],
   allowCancelRunningProcess: true,
-  processIdRule: {
-    enable: false,
-    prefix: '',
-    infix: '',
-    postfix: '',
-    length: 5,
-  },
-  autoApprovalType: BpmAutoApproveType.NONE,
-  titleSetting: {
-    enable: false,
-    title: '',
-  },
   summarySetting: {
     enable: false,
     summary: [],

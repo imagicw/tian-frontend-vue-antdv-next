@@ -16,7 +16,6 @@ export namespace BpmProcessInstanceApi {
     businessKey: string;
     category: string;
     categoryName?: string;
-    createTime: string;
     endTime: string;
     fields: string[];
     formVariables: Record<string, any>;
