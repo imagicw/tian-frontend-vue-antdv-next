@@ -1,0 +1,31 @@
+{
+  "todo": {
+    "emptyFiltered": "No todo tasks match the filters",
+    "loadMore": "Load more",
+    "noMore": "No more data",
+    "searchPlaceholder": "Search task/process name",
+    "total": "To approve",
+    "refresh": "Refresh",
+    "noSelection": "Select a task to view its details",
+    "celebration": {
+      "title": "🎉 All done, you've completed every approval task",
+      "subtitle": "No pending approval tasks"
+    },
+    "filter": {
+      "title": "Filter",
+      "category": "Category",
+      "categoryPlaceholder": "Select a category",
+      "createTime": "Start time",
+      "apply": "Search",
+      "reset": "Reset"
+    },
+    "drawer": {
+      "title": "Approval task",
+      "loadFailed": "Failed to load approval detail",
+      "formParseFailed": "Failed to parse the process form config; showing raw form data.",
+      "formTypeUnsupported": "This process has no displayable form type configured",
+      "timeline": "Approval timeline",
+      "taskList": "Task history"
+    }
+  }
+}

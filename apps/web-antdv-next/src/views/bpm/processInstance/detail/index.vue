@@ -2,7 +2,7 @@
 import type { BpmProcessInstanceApi } from '#/api/bpm/processInstance';
 import type { SystemUserApi } from '#/api/system/user';
 
-import { nextTick, onMounted, ref, shallowRef, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 
 import { Page, useVbenModal } from '@vben/common-ui';
 import {
@@ -21,7 +21,16 @@ import {
 } from '@vben/icons';
 import { formatDateTime } from '@vben/utils';
 
-import { Avatar, Card, Col, message, Row, TabPane, Tabs } from 'antdv-next';
+import {
+  Alert,
+  Avatar,
+  Card,
+  Col,
+  message,
+  Row,
+  TabPane,
+  Tabs,
+} from 'antdv-next';
 
 import {
   getApprovalDetail as getApprovalDetailApi,
@@ -30,10 +39,11 @@ import {
 import { getSimpleUserList } from '#/api/system/user';
 import DictTag from '#/components/dict-tag/dict-tag.vue';
 import { setConfAndFields2 } from '#/components/form-create';
-import { registerComponent } from '#/utils';
 
 import ProcessInstanceBpmnViewer from './modules/bpm-viewer.vue';
+import BusinessFormView from './modules/business-form-view.vue';
 import BpmProcessInstanceCommentList from './modules/comment-list.vue';
+import FormDataFallback from './modules/form-data-fallback.vue';
 import ProcessInstanceOperationButton from './modules/operation-button.vue';
 import ProcessPrint from './modules/process-print.vue';
 import ProcessInstanceSimpleViewer from './modules/simple-bpm-viewer.vue';
@@ -51,6 +61,7 @@ const props = defineProps<{
 const processInstanceLoading = ref(false); // 流程实例的加载中
 const processInstance = ref<BpmProcessInstanceApi.ProcessInstance>(); // 流程实例
 const processDefinition = ref<any>({}); // 流程定义
+const businessFormData = ref<Record<string, any>>(); // 业务表单只读数据
 const processModelView = ref<any>({}); // 流程模型视图
 const operationButtonRef = ref(); // 操作按钮组件 ref
 const activeTab = ref('form');
@@ -82,7 +93,7 @@ const detailForm = ref({
 }); // 流程实例的表单详情
 const writableFields: Array<string> = []; // 表单可以编辑的字段
 
-const BusinessFormComponent = shallowRef<any>(null); // 异步组件(业务表单）
+const formRenderError = ref('');
 
 /** 获取详情 */
 async function getDetail() {
@@ -104,16 +115,20 @@ async function getApprovalDetail() {
     const data = await getApprovalDetailApi(param);
     if (!data) {
       message.error('查询不到审批详情信息！');
+      return;
     }
     if (!data.processDefinition || !data.processInstance) {
       message.error('查询不到流程信息！');
+      return;
     }
 
     processInstance.value = data.processInstance;
     processDefinition.value = data.processDefinition;
+    businessFormData.value = data.businessFormData;
 
     // 设置表单信息
     if (processDefinition.value.formType === BpmModelFormType.NORMAL) {
+      formRenderError.value = '';
       // 获取表单字段权限
       const formFieldsPermission = data.formFieldsPermission;
       // 清空可编辑字段为空
@@ -122,12 +137,18 @@ async function getApprovalDetail() {
         // 避免刷新 form-create 显示不了
         detailForm.value.value = processInstance.value.formVariables;
       } else {
-        setConfAndFields2(
-          detailForm,
-          processDefinition.value.formConf,
-          processDefinition.value.formFields,
-          processInstance.value.formVariables,
-        );
+        try {
+          setConfAndFields2(
+            detailForm,
+            processDefinition.value.formConf,
+            processDefinition.value.formFields ?? [],
+            processInstance.value.formVariables,
+          );
+        } catch {
+          detailForm.value.rule = [];
+          detailForm.value.value = processInstance.value.formVariables ?? {};
+          formRenderError.value = '流程表单配置解析失败，已展示原始表单数据。';
+        }
       }
       await nextTick();
       fApi.value?.btn.show(false);
@@ -139,11 +160,6 @@ async function getApprovalDetail() {
           setFieldPermission(item, formFieldsPermission[item]);
         });
       }
-    } else {
-      // 注意：data.processDefinition.formCustomViewPath 是组件的全路径，例如说：/crm/contract/detail/index.vue
-      BusinessFormComponent.value = registerComponent(
-        data?.processDefinition?.formCustomViewPath || '',
-      );
     }
 
     // 获取审批节点，显示 Timeline 的数据
@@ -151,7 +167,8 @@ async function getApprovalDetail() {
 
     // 获取待办任务显示操作按钮
     operationButtonRef.value?.loadTodoTask(data.todoTask);
-  } catch {
+  } catch (error) {
+    console.error('[BpmProcessInstanceDetail] 获取审批详情失败', error);
     message.error('获取审批详情失败！');
   } finally {
     processInstanceLoading.value = false;
@@ -310,20 +327,40 @@ onMounted(async () => {
                       processDefinition?.formType === BpmModelFormType.NORMAL
                     "
                   >
+                    <Alert
+                      v-if="formRenderError"
+                      :message="formRenderError"
+                      class="mb-4"
+                      show-icon
+                      type="warning"
+                    />
                     <form-create
+                      v-if="detailForm.rule.length > 0"
                       v-model="detailForm.value"
                       v-model:api="fApi"
                       :option="detailForm.option"
                       :rule="detailForm.rule"
                     />
+                    <FormDataFallback
+                      v-else
+                      :form-variables="processInstance?.formVariables"
+                      :summary="processInstance?.summary"
+                    />
                   </div>
-                  <div
+                  <BusinessFormView
                     v-else-if="
                       processDefinition?.formType === BpmModelFormType.CUSTOM
                     "
-                  >
-                    <BusinessFormComponent :id="processInstance?.businessKey" />
-                  </div>
+                    :process-definition="processDefinition"
+                    :process-instance="processInstance"
+                    :business-form-data="businessFormData"
+                  />
+                  <Alert
+                    v-else
+                    message="当前流程未配置可展示的表单类型"
+                    show-icon
+                    type="warning"
+                  />
                 </Col>
                 <Col :xs="24" :sm="24" :md="6" :lg="6" :xl="8">
                   <div class="mt-4">
@@ -406,6 +443,6 @@ onMounted(async () => {
 
 :deep(.ant-tabs-tabpane) {
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden auto;
 }
 </style>

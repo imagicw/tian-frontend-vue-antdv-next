@@ -5,8 +5,7 @@ const routes: RouteRecordRaw[] = [
     path: '/dorm',
     name: 'Dorm',
     meta: {
-      icon: 'ant-design:home-outlined',
-      order: 40,
+      hideInMenu: true,
       title: '宿舍管理',
     },
     children: [
@@ -15,7 +14,7 @@ const routes: RouteRecordRaw[] = [
         name: 'DormArea',
         component: () => import('#/views/dorm/area/index.vue'),
         meta: {
-          icon: 'ant-design:environment-outlined',
+          hideInMenu: true,
           title: '区域管理',
           access: ['dorm:area:query'],
         },
@@ -25,9 +24,20 @@ const routes: RouteRecordRaw[] = [
         name: 'DormApply',
         component: () => import('#/views/dorm/apply/index.vue'),
         meta: {
-          icon: 'ant-design:file-text-outlined',
+          hideInMenu: true,
           title: '住宿申请',
           access: ['dorm:apply:query'],
+        },
+      },
+      {
+        path: '/bpm/dorm/create',
+        name: 'BpmDormApplyCreate',
+        component: () =>
+          import('#/views/dorm/apply/modules/process-create.vue'),
+        meta: {
+          hideInMenu: true,
+          title: '公寓申请',
+          access: ['dorm:apply:create'],
         },
       },
       {
@@ -44,7 +54,7 @@ const routes: RouteRecordRaw[] = [
         name: 'DormMyOrder',
         component: () => import('#/views/dorm/order/my.vue'),
         meta: {
-          icon: 'ant-design:user-outlined',
+          hideInMenu: true,
           title: '我的订单',
           access: ['user:dorm:order:query'],
         },
@@ -54,7 +64,7 @@ const routes: RouteRecordRaw[] = [
         name: 'DormOrder',
         component: () => import('#/views/dorm/order/index.vue'),
         meta: {
-          icon: 'ant-design:unordered-list-outlined',
+          hideInMenu: true,
           title: '住宿订单',
           access: ['dorm:order:query'],
         },
@@ -74,7 +84,7 @@ const routes: RouteRecordRaw[] = [
         name: 'DormAllocation',
         component: () => import('#/views/dorm/allocation/index.vue'),
         meta: {
-          icon: 'ant-design:dollar-outlined',
+          hideInMenu: true,
           title: '费用分摊',
           access: ['dorm:dept-fee-allocation:query'],
         },
@@ -94,7 +104,7 @@ const routes: RouteRecordRaw[] = [
         name: 'DormBuilding',
         component: () => import('#/views/dorm/building/index.vue'),
         meta: {
-          icon: 'ant-design:apartment-outlined',
+          hideInMenu: true,
           title: '楼栋管理',
           access: ['dorm:build:query'],
         },
@@ -104,7 +114,7 @@ const routes: RouteRecordRaw[] = [
         name: 'DormScheduler',
         component: () => import('#/views/dorm/scheduler/index.vue'),
         meta: {
-          icon: 'ant-design:schedule-outlined',
+          hideInMenu: true,
           title: '排房管理',
           access: ['dorm:room:query'],
         },

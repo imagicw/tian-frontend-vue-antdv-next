@@ -38,12 +38,15 @@ watch(
   { immediate: true },
 );
 
-/** 监听 bpmnXml */
+/** 监听 bpmnXml：仅在显式传入时才覆盖，避免覆盖 modelView 里解析出的 bpmnXml */
 watch(
   () => props.bpmnXml,
   (value) => {
-    view.value.bpmnXml = value || '';
+    if (value) {
+      view.value.bpmnXml = value;
+    }
   },
+  { immediate: true },
 );
 </script>
 

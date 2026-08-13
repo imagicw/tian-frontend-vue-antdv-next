@@ -54,6 +54,7 @@ export namespace BpmProcessInstanceApi {
   /** 审批详情 */
   export interface ApprovalDetailRespVO {
     activityNodes: BpmProcessInstanceApi.ApprovalNodeInfo[];
+    businessFormData?: Record<string, any>;
     formFieldsPermission: any;
     processDefinition: BpmModelApi.ProcessDefinition;
     processInstance: BpmProcessInstanceApi.ProcessInstance;

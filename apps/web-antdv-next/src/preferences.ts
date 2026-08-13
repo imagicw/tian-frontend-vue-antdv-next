@@ -37,6 +37,8 @@ export const overridesPreferences = defineOverridesPreferences({
   copyright: {
     companyName: import.meta.env.VITE_APP_TITLE,
     companySiteLink: 'https://tian.gthsip.cn',
+    "date": "2024-2026",
+    icp: ""
   },
   breadcrumb: {
     hideOnlyOne: true,

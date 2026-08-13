@@ -15,6 +15,7 @@ import {
   message,
   Row,
   Space,
+  TabPane,
   Tabs,
   Tooltip,
 } from 'antdv-next';

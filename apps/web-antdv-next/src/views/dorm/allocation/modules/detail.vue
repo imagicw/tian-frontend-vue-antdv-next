@@ -67,7 +67,7 @@ onMounted(loadDetail);
               <Button
                 danger
                 size="small"
-                v-auth="'dorm:dept-fee-allocation:update'"
+                v-auth="'dorm:dept-fee-allocation:allocate'"
               >
                 撤销
               </Button>

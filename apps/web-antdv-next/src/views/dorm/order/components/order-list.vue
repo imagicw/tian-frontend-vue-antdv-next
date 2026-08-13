@@ -6,7 +6,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { useAccess } from '@vben/access';
-import { Page } from '@vben/common-ui';
+import { Page, useVbenModal } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
 import { useUserStore } from '@vben/stores';
 import { formatDate } from '@vben/utils';
@@ -15,6 +15,7 @@ import {
   Avatar,
   Button,
   Card,
+  Checkbox,
   Col,
   DateRangePicker,
   Empty,
@@ -36,6 +37,7 @@ import dayjs from 'dayjs';
 
 import { cancelDormOrder, getMyOrderPage, getOrderPage } from '#/api/dorm';
 import { getSimpleUserList } from '#/api/system/user';
+import AllocationForm from '#/views/dorm/allocation/modules/allocation-form.vue';
 
 type OrderListMode = 'admin' | 'my';
 
@@ -55,6 +57,12 @@ const users = ref<SystemUserApi.User[]>([]);
 const queryFormRef = ref();
 const activeStatus = ref('all');
 const failedImages = reactive(new Set<string>());
+const selectedSerials = ref(new Set<string>());
+
+const [AllocationModal, allocationModalApi] = useVbenModal({
+  connectedComponent: AllocationForm,
+  destroyOnClose: true,
+});
 
 const queryParams = reactive({
   createTime: undefined as [string, string] | undefined,
@@ -69,7 +77,16 @@ const isAdmin = computed(() => props.mode === 'admin');
 const canManageOrders = computed(
   () => isAdmin.value && hasAccessByCodes(['dorm:room:update']),
 );
+const canAllocateFee = computed(
+  () => isAdmin.value && hasAccessByCodes(['dorm:dept-fee-allocation:allocate']),
+);
 const pageTitle = computed(() => (isAdmin.value ? '住宿订单' : '我的订单'));
+
+const selectedOrders = computed(() =>
+  orders.value.filter(
+    (order) => order.orderSerial && selectedSerials.value.has(order.orderSerial),
+  ),
+);
 
 const userOptions = computed(() =>
   users.value.map((user) => ({
@@ -101,9 +118,62 @@ async function getList() {
     const data = await request(queryParams);
     orders.value = data.list ?? [];
     total.value = data.total ?? 0;
+    selectedSerials.value.clear();
   } finally {
     loading.value = false;
   }
+}
+
+function canSelectOrder(order: DormApi.DormOrder) {
+  return canAllocateFee.value && order.status === 3;
+}
+
+function isSelected(order: DormApi.DormOrder) {
+  return !!order.orderSerial && selectedSerials.value.has(order.orderSerial);
+}
+
+function toggleSelect(order: DormApi.DormOrder) {
+  if (!order.orderSerial || !canSelectOrder(order)) return;
+  if (selectedSerials.value.has(order.orderSerial)) {
+    selectedSerials.value.delete(order.orderSerial);
+  } else {
+    selectedSerials.value.add(order.orderSerial);
+  }
+}
+
+function clearSelection() {
+  selectedSerials.value.clear();
+}
+
+function handleStartAllocation() {
+  if (selectedOrders.value.length === 0) {
+    message.warning('请先选择需要分摊的订单');
+    return;
+  }
+  const currencies = new Set(
+    selectedOrders.value.map((order) => order.settleCurrencyCode),
+  );
+  if (currencies.size > 1) {
+    message.error('所选订单存在多个币种，请选择相同币种的订单');
+    return;
+  }
+  const areas = new Set(
+    selectedOrders.value.map((order) => order.dormOrderSnapshot?.areaName),
+  );
+  if (areas.size > 1) {
+    message.error('所选订单存在多个区域，请选择相同区域的订单');
+    return;
+  }
+  const orders = selectedOrders.value.map((order) => ({
+    ...order,
+    userName: order.userName || getApplicant(order).name,
+  }));
+  allocationModalApi.setData({ orders }).open();
+}
+
+function handleAllocationSuccess() {
+  clearSelection();
+  getList();
 }
 
 async function loadUsers() {
@@ -282,6 +352,7 @@ onMounted(() => {
 
 <template>
   <Page auto-content-height>
+    <AllocationModal @success="handleAllocationSuccess" />
     <div class="flex h-full flex-col gap-3 overflow-hidden">
       <Card
         class="order-toolbar shrink-0 shadow-sm"
@@ -289,6 +360,22 @@ onMounted(() => {
       >
         <div class="order-toolbar__heading">
           <h2>{{ pageTitle }}</h2>
+          <div v-if="canAllocateFee" class="ml-auto flex items-center gap-2">
+            <span v-if="selectedSerials.size > 0" class="text-muted-foreground text-sm">
+              已选 {{ selectedSerials.size }} 个订单
+            </span>
+            <Button v-if="selectedSerials.size > 0" @click="clearSelection">
+              取消选择
+            </Button>
+            <Button
+              type="primary"
+              :disabled="selectedSerials.size === 0"
+              @click="handleStartAllocation"
+            >
+              <IconifyIcon icon="lucide:split" />
+              发起费用分摊
+            </Button>
+          </div>
         </div>
 
         <Form
@@ -377,6 +464,7 @@ onMounted(() => {
             >
               <Card
                 class="order-card h-full overflow-hidden shadow-sm"
+                :class="{ 'order-card--selected': isSelected(order) }"
                 hoverable
                 :body-style="{
                   padding: 0,
@@ -386,6 +474,14 @@ onMounted(() => {
                 }"
                 @click="openDetail(order)"
               >
+                <div
+                  v-if="canSelectOrder(order)"
+                  class="order-card__select"
+                  @click.stop="toggleSelect(order)"
+                >
+                  <Checkbox :checked="isSelected(order)" />
+                </div>
+
                 <div
                   v-if="
                     getOrderImage(order) &&
@@ -660,6 +756,27 @@ onMounted(() => {
 .order-card:hover {
   border-color: rgb(22 119 255 / 35%);
   transform: translateY(-1px);
+}
+
+.order-card--selected {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 18%);
+}
+
+.order-card__select {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: hsl(var(--card) / 92%);
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  backdrop-filter: blur(3px);
 }
 
 .order-card__content {
