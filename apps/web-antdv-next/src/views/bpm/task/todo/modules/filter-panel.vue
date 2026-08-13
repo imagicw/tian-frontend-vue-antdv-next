@@ -80,13 +80,12 @@ function handleReset() {
     size="small"
     :body-style="{ padding: '16px' }"
   >
-    <Form layout="inline">
+    <Form layout="vertical">
       <FormItem :label="$t('bpm.todo.filter.category')">
         <Select
           v-model:value="category"
           :options="categoryOptions"
           allow-clear
-          class="w-48"
           :placeholder="$t('bpm.todo.filter.categoryPlaceholder')"
         />
       </FormItem>
@@ -95,18 +94,15 @@ function handleReset() {
           v-model:value="createTime"
           v-bind="getRangePickerDefaultProps()"
           allow-clear
+          class="w-full"
         />
       </FormItem>
-      <FormItem>
-        <Space>
-          <Button @click="handleReset">
-            {{ $t('bpm.todo.filter.reset') }}
-          </Button>
-          <Button type="primary" @click="handleApply">
-            {{ $t('bpm.todo.filter.apply') }}
-          </Button>
-        </Space>
-      </FormItem>
+      <Space class="w-full justify-end">
+        <Button @click="handleReset">{{ $t('bpm.todo.filter.reset') }}</Button>
+        <Button type="primary" @click="handleApply">
+          {{ $t('bpm.todo.filter.apply') }}
+        </Button>
+      </Space>
     </Form>
   </Card>
 </template>

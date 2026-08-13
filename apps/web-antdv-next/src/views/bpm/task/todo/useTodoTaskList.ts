@@ -78,12 +78,15 @@ export function useTodoTaskList() {
 
   /**
    * 乐观地从列表中移除一个任务（审批提交成功后立即调用）。
-   * 返回一个 rollback 函数：审批提交失败时调用可将任务恢复到原位置。
+   *
+   * 返回 rollback（审批提交失败时调用可将任务恢复到原位置）和 nextTaskId ——
+   * 移除后原索引位置上的新任务（即“下一条”；若移除的是最后一条则回退到新的最后一条），
+   * 列表为空时为 undefined，供主从布局右栏面板决定接下来展示哪个任务。
    */
   function removeTaskOptimistic(taskId: string) {
     const index = list.value.findIndex((task) => task.id === taskId);
     if (index === -1) {
-      return () => {};
+      return { rollback: () => {}, nextTaskId: undefined };
     }
     const removedTask = list.value[index]!;
     list.value = [
@@ -92,8 +95,11 @@ export function useTodoTaskList() {
     ];
     total.value = Math.max(0, total.value - 1);
 
+    const nextIndex = Math.min(index, list.value.length - 1);
+    const nextTaskId = nextIndex >= 0 ? list.value[nextIndex]?.id : undefined;
+
     let rolledBack = false;
-    return function rollback() {
+    function rollback() {
       if (rolledBack) return;
       rolledBack = true;
       const insertAt = Math.min(index, list.value.length);
@@ -103,7 +109,9 @@ export function useTodoTaskList() {
         ...list.value.slice(insertAt),
       ];
       total.value += 1;
-    };
+    }
+
+    return { rollback, nextTaskId };
   }
 
   return {

@@ -1,9 +1,16 @@
 {
   "todo": {
-    "empty": "暂无待办任务",
+    "emptyFiltered": "没有符合条件的待办任务",
     "loadMore": "加载更多",
     "noMore": "没有更多了",
     "searchPlaceholder": "搜索任务/流程名称",
+    "total": "待审批",
+    "refresh": "刷新",
+    "noSelection": "请选择一项任务查看详情",
+    "celebration": {
+      "title": "🎉 太棒了，你已完成所有审批任务",
+      "subtitle": "没有待审批的任务"
+    },
     "filter": {
       "title": "筛选",
       "category": "流程分类",
@@ -18,8 +25,7 @@
       "formParseFailed": "流程表单配置解析失败，已展示原始表单数据。",
       "formTypeUnsupported": "当前流程未配置可展示的表单类型",
       "timeline": "审批时间线",
-      "taskList": "流转记录",
-      "diagram": "流程图"
+      "taskList": "流转记录"
     }
   }
 }

@@ -92,13 +92,55 @@ describe('useTodoTaskList', () => {
       useTodoTaskList();
     await loadFirstPage();
 
-    const rollback = removeTaskOptimistic('2');
+    const { rollback } = removeTaskOptimistic('2');
     expect(list.value.map((task) => task.id)).toEqual(['1', '3']);
 
     rollback();
 
     expect(list.value.map((task) => task.id)).toEqual(['1', '2', '3']);
     expect(total.value).toBe(3);
+  });
+
+  it('移除中间任务后 nextTaskId 指向原索引位置上的新任务（原本的下一条）', async () => {
+    getTaskTodoPageMock.mockResolvedValueOnce({
+      list: [makeTask('1'), makeTask('2'), makeTask('3')],
+      total: 3,
+    });
+
+    const { loadFirstPage, removeTaskOptimistic } = useTodoTaskList();
+    await loadFirstPage();
+
+    const { nextTaskId } = removeTaskOptimistic('2');
+
+    expect(nextTaskId).toBe('3');
+  });
+
+  it('移除最后一条任务后 nextTaskId 回退到新的最后一条', async () => {
+    getTaskTodoPageMock.mockResolvedValueOnce({
+      list: [makeTask('1'), makeTask('2'), makeTask('3')],
+      total: 3,
+    });
+
+    const { loadFirstPage, removeTaskOptimistic } = useTodoTaskList();
+    await loadFirstPage();
+
+    const { nextTaskId } = removeTaskOptimistic('3');
+
+    expect(nextTaskId).toBe('2');
+  });
+
+  it('移除唯一一条任务后 nextTaskId 为 undefined', async () => {
+    getTaskTodoPageMock.mockResolvedValueOnce({
+      list: [makeTask('1')],
+      total: 1,
+    });
+
+    const { loadFirstPage, removeTaskOptimistic } = useTodoTaskList();
+    await loadFirstPage();
+
+    const { nextTaskId } = removeTaskOptimistic('1');
+
+    expect(nextTaskId).toBeUndefined();
   });
 
   it('拉取列表失败时暴露错误状态供 UI 使用，并保持 loading 收尾', async () => {
