@@ -206,11 +206,14 @@ const [Grid, gridApi] = useVbenVxeGrid({
 
     <div class="flex h-full w-full">
       <!-- 左侧部门树 -->
-      <Card class="mr-4 h-full w-1/6">
+      <Card
+        class="mr-4 h-full w-1/6 min-w-0"
+        :body-style="{ height: '100%', overflow: 'hidden auto' }"
+      >
         <DeptTreeSelect @select="handleDeptSelect" />
       </Card>
       <!-- 右侧用户列表 -->
-      <div class="w-5/6">
+      <div class="w-5/6 min-w-0">
         <Grid table-title="用户列表">
           <template #toolbar-tools>
             <TableAction

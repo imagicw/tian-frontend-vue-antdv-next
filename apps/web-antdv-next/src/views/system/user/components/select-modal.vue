@@ -485,17 +485,17 @@ function processDeptNode(node: any): DeptTreeNode {
 <style lang="scss" scoped>
 :deep(.ant-transfer) {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   height: 500px;
 }
 
-:deep(.ant-transfer-list) {
+:deep(.ant-transfer-section) {
   display: flex;
   flex: 1;
   flex-direction: column;
   width: 300px !important;
-  height: 100%;
+  height: 100% !important;
+  min-height: 0;
 }
 
 :deep(.ant-transfer-list-header) {
@@ -508,19 +508,25 @@ function processDeptNode(node: any): DeptTreeNode {
 }
 
 :deep(.ant-transfer-list-body) {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-height: 0;
   overflow: auto;
 }
 
 :deep(.ant-transfer-list-content) {
-  height: auto !important;
+  flex: 1;
+  overflow: auto;
 }
 
 :deep(.ant-transfer-list-content-item) {
   padding: 6px 12px;
 }
 
-:deep(.ant-transfer-operation) {
+:deep(.ant-transfer-actions) {
+  display: flex;
+  align-items: center;
   padding: 0 8px;
 }
 

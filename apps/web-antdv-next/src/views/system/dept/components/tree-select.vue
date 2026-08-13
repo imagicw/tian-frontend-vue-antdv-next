@@ -86,7 +86,7 @@ onMounted(async () => {
       <Tree
         v-if="deptTree.length > 0"
         v-model:selected-keys="selectedKeys"
-        class="pt-2"
+        class="dept-tree pt-2"
         :default-expand-all="true"
         :field-names="{ title: 'name', key: 'id', children: 'children' }"
         :tree-data="deptTree"
@@ -98,3 +98,23 @@ onMounted(async () => {
     </Spin>
   </div>
 </template>
+
+<style lang="scss" scoped>
+.dept-tree {
+  min-width: 0;
+
+  :deep(.ant-tree-node-content-wrapper) {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  :deep(.ant-tree-title) {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+    white-space: nowrap;
+  }
+}
+</style>
