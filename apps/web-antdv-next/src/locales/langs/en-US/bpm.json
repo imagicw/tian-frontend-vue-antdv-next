@@ -2,6 +2,15 @@
   "todo": {
     "empty": "No todo tasks",
     "loadMore": "Load more",
-    "noMore": "No more data"
+    "noMore": "No more data",
+    "searchPlaceholder": "Search task/process name",
+    "filter": {
+      "title": "Filter",
+      "category": "Category",
+      "categoryPlaceholder": "Select a category",
+      "createTime": "Start time",
+      "apply": "Search",
+      "reset": "Reset"
+    }
   }
 }

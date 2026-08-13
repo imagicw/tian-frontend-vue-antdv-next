@@ -1,24 +1,82 @@
 <script lang="ts" setup>
+import type { BpmCategoryApi } from '#/api/bpm/category';
 import type { BpmTaskApi } from '#/api/bpm/task';
 
-import { onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { useAccess } from '@vben/access';
 import { DocAlert, Page } from '@vben/common-ui';
+import { useIsMobile } from '@vben/hooks';
+import { IconifyIcon } from '@vben/icons';
 import { formatDateTime } from '@vben/utils';
 
-import { Avatar, Button, Card, Col, Empty, Row, Spin, Tag } from 'antdv-next';
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Input,
+  Row,
+  Spin,
+  Tag,
+} from 'antdv-next';
 
+import { getCategorySimpleList } from '#/api/bpm/category';
 import { $t } from '#/locales';
 import { router } from '#/router';
 
+import FilterPanel from './modules/filter-panel.vue';
 import { useTodoTaskList } from './useTodoTaskList';
 
 defineOptions({ name: 'BpmTodoTask' });
 
 const { hasAccessByCodes } = useAccess();
+const { isMobile } = useIsMobile();
 
 const { list, loading, hasMore, loadFirstPage, loadMore } = useTodoTaskList();
+
+const searchName = ref<string>();
+const filterOpen = ref(false);
+const filterCategory = ref<string>();
+const filterCreateTime = ref<[string, string]>();
+const categories = ref<BpmCategoryApi.Category[]>([]);
+
+const categoryOptions = computed(() =>
+  categories.value.map((item) => ({ label: item.name, value: item.code })),
+);
+const activeFilterCount = computed(
+  () => [filterCategory.value, filterCreateTime.value].filter(Boolean).length,
+);
+
+function queryList() {
+  loadFirstPage({
+    name: searchName.value || undefined,
+    category: filterCategory.value,
+    createTime: filterCreateTime.value,
+  });
+}
+
+function handleFilterApply() {
+  filterOpen.value = false;
+  queryList();
+}
+
+function handleFilterReset() {
+  filterCategory.value = undefined;
+  filterCreateTime.value = undefined;
+  filterOpen.value = false;
+  queryList();
+}
+
+async function loadCategories() {
+  try {
+    categories.value = await getCategorySimpleList();
+  } catch {
+    categories.value = [];
+  }
+}
 
 /** 拼接流程摘要（全量展示，不展示当前节点名称） */
 function getSummaryText(task: BpmTaskApi.Task) {
@@ -46,7 +104,8 @@ function handleAudit(task: BpmTaskApi.Task) {
 }
 
 onMounted(() => {
-  loadFirstPage();
+  queryList();
+  loadCategories();
 });
 </script>
 
@@ -66,6 +125,36 @@ onMounted(() => {
     </template>
 
     <div class="flex h-full min-h-0 flex-col gap-3">
+      <div class="flex shrink-0 items-center gap-2">
+        <Input
+          v-model:value="searchName"
+          allow-clear
+          class="max-w-xs"
+          :placeholder="$t('bpm.todo.searchPlaceholder')"
+          @change="!searchName && queryList()"
+          @press-enter="queryList"
+        />
+        <Button @click="queryList">
+          <IconifyIcon icon="lucide:search" />
+        </Button>
+        <Badge :count="activeFilterCount" size="small">
+          <Button @click="filterOpen = !filterOpen">
+            <IconifyIcon icon="lucide:filter" />
+            {{ $t('bpm.todo.filter.title') }}
+          </Button>
+        </Badge>
+      </div>
+
+      <FilterPanel
+        v-model:category="filterCategory"
+        v-model:create-time="filterCreateTime"
+        v-model:open="filterOpen"
+        :category-options="categoryOptions"
+        :is-mobile="isMobile"
+        @apply="handleFilterApply"
+        @reset="handleFilterReset"
+      />
+
       <div class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1 pb-1">
         <Spin :spinning="loading && list.length === 0">
           <Card

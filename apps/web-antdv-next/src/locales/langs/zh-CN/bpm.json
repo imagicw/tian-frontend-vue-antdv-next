@@ -2,6 +2,15 @@
   "todo": {
     "empty": "暂无待办任务",
     "loadMore": "加载更多",
-    "noMore": "没有更多了"
+    "noMore": "没有更多了",
+    "searchPlaceholder": "搜索任务/流程名称",
+    "filter": {
+      "title": "筛选",
+      "category": "流程分类",
+      "categoryPlaceholder": "请选择流程分类",
+      "createTime": "发起时间",
+      "apply": "查询",
+      "reset": "重置"
+    }
   }
 }
