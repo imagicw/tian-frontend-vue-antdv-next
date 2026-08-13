@@ -37,7 +37,14 @@ defineOptions({ name: 'BpmTodoTask' });
 const { hasAccessByCodes } = useAccess();
 const { isMobile } = useIsMobile();
 
-const { list, loading, hasMore, loadFirstPage, loadMore } = useTodoTaskList();
+const {
+  list,
+  loading,
+  hasMore,
+  loadFirstPage,
+  loadMore,
+  removeTaskOptimistic,
+} = useTodoTaskList();
 
 const userOptions = ref<SystemUserApi.User[]>([]);
 
@@ -120,9 +127,9 @@ function handleAudit(task: BpmTaskApi.Task) {
     .open();
 }
 
-/** 审批提交成功：重新拉取当前页数据（乐观移除在 T4 落地） */
-function handleApprovalSuccess() {
-  queryList();
+/** 审批提交成功：乐观地从列表中移除对应卡片，不重新拉取整页数据 */
+function handleApprovalSuccess(taskId: string) {
+  removeTaskOptimistic(taskId);
 }
 
 onMounted(() => {
