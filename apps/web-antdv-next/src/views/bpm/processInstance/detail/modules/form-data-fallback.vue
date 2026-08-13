@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import { Descriptions, DescriptionsItem, Empty, Tag } from 'antdv-next';
+import { DescriptionsItem, Empty, Tag } from 'antdv-next';
+
+import BpmDetailDescriptions from './detail-descriptions.vue';
 
 const props = defineProps<{
   formVariables?: Record<string, unknown>;
@@ -36,7 +38,7 @@ function displayValue(value: unknown) {
 </script>
 
 <template>
-  <Descriptions v-if="items.length > 0" bordered :column="1" size="small">
+  <BpmDetailDescriptions v-if="items.length > 0" :column="1">
     <DescriptionsItem v-for="item in items" :key="item.key" :label="item.label">
       <Tag v-if="typeof item.value === 'boolean'">
         {{ displayValue(item.value) }}
@@ -49,6 +51,6 @@ function displayValue(value: unknown) {
       </div>
       <span v-else>{{ displayValue(item.value) }}</span>
     </DescriptionsItem>
-  </Descriptions>
+  </BpmDetailDescriptions>
   <Empty v-else description="暂无可展示的表单数据" />
 </template>

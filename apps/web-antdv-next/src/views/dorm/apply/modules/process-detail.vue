@@ -5,18 +5,12 @@ import type { DormApi } from '#/api/dorm';
 
 import { computed, ref, watch } from 'vue';
 
-import {
-  Alert,
-  Descriptions,
-  DescriptionsItem,
-  Empty,
-  Spin,
-  Table,
-  Tag,
-} from 'antdv-next';
+import { Alert, DescriptionsItem, Empty, Spin, Table, Tag } from 'antdv-next';
 
 import { getApplyList } from '#/api/dorm';
+import BpmDetailDescriptions from '#/views/bpm/processInstance/detail/modules/detail-descriptions.vue';
 
+import { getDormTimezoneLabel } from '../../area/timezones';
 import { APPLY_STATUS_MAP } from '../data';
 
 const props = defineProps<{
@@ -107,8 +101,8 @@ watch([applicationId, () => props.data], loadApplication, { immediate: true });
       show-icon
       type="error"
     />
-    <div v-else-if="application" class="space-y-4">
-      <Descriptions bordered :column="printMode ? 2 : 1" size="small">
+    <div v-else-if="application">
+      <BpmDetailDescriptions :column="printMode ? 2 : 1">
         <DescriptionsItem label="申请单号">
           {{ application.orderSerial || '-' }}
         </DescriptionsItem>
@@ -125,7 +119,7 @@ watch([applicationId, () => props.data], loadApplication, { immediate: true });
           {{ application.day ?? '-' }} 天
         </DescriptionsItem>
         <DescriptionsItem label="当地时区">
-          {{ application.areaTimezone || '-' }}
+          {{ getDormTimezoneLabel(application.areaTimezone) }}
         </DescriptionsItem>
         <DescriptionsItem label="申请原因" :span="printMode ? 2 : 1">
           {{ application.reason || '-' }}
@@ -139,9 +133,10 @@ watch([applicationId, () => props.data], loadApplication, { immediate: true });
         <DescriptionsItem label="其他需求" :span="printMode ? 2 : 1">
           {{ displayRequirement(application.additionalRequire?.other) }}
         </DescriptionsItem>
-      </Descriptions>
+      </BpmDetailDescriptions>
 
       <Table
+        class="mt-6"
         :columns="guestColumns"
         :data-source="guestRows"
         :pagination="false"

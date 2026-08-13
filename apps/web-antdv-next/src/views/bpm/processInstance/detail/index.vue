@@ -443,6 +443,6 @@ onMounted(async () => {
 
 :deep(.ant-tabs-tabpane) {
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden auto;
 }
 </style>
