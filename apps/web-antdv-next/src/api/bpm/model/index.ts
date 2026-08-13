@@ -43,6 +43,12 @@ export namespace BpmModelApi {
     formFields?: string[];
   }
 
+  /** 待办任务卡片摘要设置 */
+  export interface SummarySetting {
+    enable: boolean;
+    summary: string[];
+  }
+
   /** 用户信息 */
   export interface UserInfo {
     id: number;

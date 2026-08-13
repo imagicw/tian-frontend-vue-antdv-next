@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { BpmModelApi } from '#/api/bpm/model';
+
 import { computed, provide, ref, watch } from 'vue';
 
 import { useVbenModal } from '@vben/common-ui';
@@ -30,11 +32,22 @@ import dayjs from 'dayjs';
 
 import { getForm } from '#/api/bpm/form';
 import { parseFormFields } from '#/components/form-create';
+import {
+  getBusinessFormSummaryFields,
+  resolveBusinessFormViewPath,
+} from '#/utils/business-form';
 import { HttpRequestSetting } from '#/views/bpm/components/simple-process-design';
 
 import PrintTemplate from './custom-print-template.vue';
 
-const modelData = defineModel<any>();
+interface ExtraSettingModel {
+  formType?: number;
+  formCustomViewPath?: string;
+  summarySetting?: BpmModelApi.SummarySetting;
+  [key: string]: any;
+}
+
+const modelData = defineModel<ExtraSettingModel>({ required: true });
 
 /** 自定义 ID 流程编码 */
 const timeOptions = ref([
@@ -175,6 +188,11 @@ const formFieldOptions4Title = computed(() => {
   return cloneFormField;
 });
 const formFieldOptions4Summary = computed(() => {
+  if (modelData.value.formType === BpmModelFormType.CUSTOM) {
+    return getBusinessFormSummaryFields(
+      resolveBusinessFormViewPath(modelData.value.formCustomViewPath),
+    ).map((item) => ({ label: item.label, value: item.key }));
+  }
   return formFields.value.map((item) => {
     return {
       label: item.title,
@@ -471,14 +489,7 @@ defineExpose({ initData, validate });
         </div>
       </div>
     </FormItem>
-    <FormItem
-      v-if="
-        modelData.summarySetting &&
-        modelData.formType === BpmModelFormType.NORMAL
-      "
-      class="mb-5"
-      label="摘要设置"
-    >
+    <FormItem v-if="modelData.summarySetting" class="mb-5" label="摘要设置">
       <div class="mt-1">
         <RadioGroup v-model:value="modelData.summarySetting.enable">
           <Row :gutter="[0, 8]">
@@ -486,7 +497,11 @@ defineExpose({ initData, validate });
               <Radio :value="false">
                 系统默认
                 <TypographyText type="secondary">
-                  展示表单前 3 个字段
+                  {{
+                    modelData.formType === BpmModelFormType.CUSTOM
+                      ? '不展示摘要'
+                      : '展示表单前 3 个字段'
+                  }}
                 </TypographyText>
               </Radio>
             </Col>

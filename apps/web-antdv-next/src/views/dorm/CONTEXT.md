@@ -73,3 +73,7 @@ _Avoid_: 修改审批时间、直接改订单日期
 **费用分摊**:
 对一批已结算的住宿订单，按部门比例或金额拆分实际费用的操作；与住宿人在申请时声明的归属部门不必一致。
 _Avoid_: 归属部门、部门标签
+
+## 与 BPM 的耦合
+
+住宿申请复用 `bpm/CONTEXT.md` 里的"业务表单视图注册表"与"摘要字段字典"机制：`formCustomViewPath = /dorm/apply/modules/process-detail.vue`，摘要字段字典声明 `applicantName`（申请人）、`roomInfo`（房间信息）、`checkInDate`（入住时间），供待办任务卡片摘要展示。字段值由后端 `DormApplyServiceImpl` 在发起流程时格式化写入流程变量，前端字典本身只声明 key/label，不做格式化。
