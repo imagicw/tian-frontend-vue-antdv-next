@@ -13,6 +13,20 @@ const allowedScopes = [
   'dev',
   'deploy',
   'other',
+  // Tian System business domains (apps/web-antdv-next/src/{router/routes/modules,views}/*)
+  'dashboard',
+  'dorm',
+  'bpm',
+  'finance',
+  'shipment',
+  'ai',
+  'infra',
+  'system',
+  'leave',
+  'mp',
+  'erp',
+  'wms',
+  'report',
 ];
 
 // precomputed scope
