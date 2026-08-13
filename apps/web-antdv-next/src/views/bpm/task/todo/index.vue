@@ -1,11 +1,12 @@
 <script lang="ts" setup>
 import type { BpmCategoryApi } from '#/api/bpm/category';
 import type { BpmTaskApi } from '#/api/bpm/task';
+import type { SystemUserApi } from '#/api/system/user';
 
 import { computed, onMounted, ref } from 'vue';
 
 import { useAccess } from '@vben/access';
-import { DocAlert, Page } from '@vben/common-ui';
+import { DocAlert, Page, useVbenDrawer } from '@vben/common-ui';
 import { useIsMobile } from '@vben/hooks';
 import { IconifyIcon } from '@vben/icons';
 import { formatDateTime } from '@vben/utils';
@@ -24,9 +25,10 @@ import {
 } from 'antdv-next';
 
 import { getCategorySimpleList } from '#/api/bpm/category';
+import { getSimpleUserList } from '#/api/system/user';
 import { $t } from '#/locales';
-import { router } from '#/router';
 
+import ApprovalDrawerForm from './modules/approval-drawer.vue';
 import FilterPanel from './modules/filter-panel.vue';
 import { useTodoTaskList } from './useTodoTaskList';
 
@@ -36,6 +38,13 @@ const { hasAccessByCodes } = useAccess();
 const { isMobile } = useIsMobile();
 
 const { list, loading, hasMore, loadFirstPage, loadMore } = useTodoTaskList();
+
+const userOptions = ref<SystemUserApi.User[]>([]);
+
+const [ApprovalDrawer, approvalDrawerApi] = useVbenDrawer({
+  connectedComponent: ApprovalDrawerForm,
+  destroyOnClose: true,
+});
 
 const searchName = ref<string>();
 const filterOpen = ref(false);
@@ -78,6 +87,14 @@ async function loadCategories() {
   }
 }
 
+async function loadUserOptions() {
+  try {
+    userOptions.value = await getSimpleUserList();
+  } catch {
+    userOptions.value = [];
+  }
+}
+
 /** 拼接流程摘要（全量展示，不展示当前节点名称） */
 function getSummaryText(task: BpmTaskApi.Task) {
   const summary = task.processInstance?.summary;
@@ -91,21 +108,27 @@ function getStartUserInitial(task: BpmTaskApi.Task) {
   return nickname?.trim().slice(0, 1).toUpperCase() || '?';
 }
 
-/** 办理任务：跳转到流程实例详情页 */
+/** 办理任务：打开 Drawer 就地审批 */
 function handleAudit(task: BpmTaskApi.Task) {
   if (!hasAccessByCodes(['bpm:task:query'])) return;
-  router.push({
-    name: 'BpmProcessInstanceDetail',
-    query: {
-      id: task.processInstance!.id,
+  approvalDrawerApi
+    .setData({
+      processInstanceId: task.processInstance!.id,
       taskId: task.id,
-    },
-  });
+      userOptions: userOptions.value,
+    })
+    .open();
+}
+
+/** 审批提交成功：重新拉取当前页数据（乐观移除在 T4 落地） */
+function handleApprovalSuccess() {
+  queryList();
 }
 
 onMounted(() => {
   queryList();
   loadCategories();
+  loadUserOptions();
 });
 </script>
 
@@ -227,6 +250,8 @@ onMounted(() => {
         </span>
       </div>
     </div>
+
+    <ApprovalDrawer @success="handleApprovalSuccess" />
   </Page>
 </template>
 

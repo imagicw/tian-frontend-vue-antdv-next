@@ -11,6 +11,15 @@
       "createTime": "发起时间",
       "apply": "查询",
       "reset": "重置"
+    },
+    "drawer": {
+      "title": "审批任务",
+      "loadFailed": "获取审批详情失败",
+      "formParseFailed": "流程表单配置解析失败，已展示原始表单数据。",
+      "formTypeUnsupported": "当前流程未配置可展示的表单类型",
+      "timeline": "审批时间线",
+      "taskList": "流转记录",
+      "diagram": "流程图"
     }
   }
 }

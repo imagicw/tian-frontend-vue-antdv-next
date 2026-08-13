@@ -11,6 +11,15 @@
       "createTime": "Start time",
       "apply": "Search",
       "reset": "Reset"
+    },
+    "drawer": {
+      "title": "Approval task",
+      "loadFailed": "Failed to load approval detail",
+      "formParseFailed": "Failed to parse the process form config; showing raw form data.",
+      "formTypeUnsupported": "This process has no displayable form type configured",
+      "timeline": "Approval timeline",
+      "taskList": "Task history",
+      "diagram": "Process diagram"
     }
   }
 }
