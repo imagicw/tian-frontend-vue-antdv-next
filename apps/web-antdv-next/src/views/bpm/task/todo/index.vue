@@ -357,7 +357,7 @@ onMounted(() => {
           <Card
             v-if="!loading && list.length === 0"
             class="shadow-sm"
-            :body-style="{ padding: '40px 16px' }"
+            :styles="{ body: { padding: '40px 16px' } }"
           >
             <Empty :description="$t('bpm.todo.emptyFiltered')" />
           </Card>
@@ -374,7 +374,7 @@ onMounted(() => {
               <Card
                 class="todo-task-card h-full overflow-hidden shadow-sm"
                 hoverable
-                :body-style="{ padding: '16px' }"
+                :styles="{ body: { padding: '16px' } }"
                 @click="handleAudit(task)"
               >
                 <TaskListItem :task="task" />

@@ -699,6 +699,9 @@ async function initComponentAdapter() {
       component: Select,
       loadingSlot: 'suffixIcon',
       modelPropName: 'value',
+      // ApiComponent 始终把选项归一化为 { label, value }，默认按 label（如人员昵称）过滤，
+      // 避免只能按 id 检索；调用方可通过传入 optionFilterProp 覆盖此默认值。
+      optionFilterProp: 'label',
       visibleEvent: 'onOpenChange',
     }),
     ApiTreeSelect: withDefaultPlaceholder(ApiComponent, 'select', {

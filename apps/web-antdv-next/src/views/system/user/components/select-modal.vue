@@ -311,9 +311,14 @@ function resetData() {
   };
 }
 
-// TODO   后端接口目前仅支持  username 检索， 筛选条件需要跟后端请求参数保持一致。
+// 后端搜索接口目前仅支持 username 检索（见 handleUserSearch），这里在客户端按昵称（姓名）
+// 补充过滤已加载的数据，让用户可以直接按人名搜索，而不是必须知道 id/username。
 function filterOption(inputValue: string, option: any) {
-  return option.username.toLowerCase().includes(inputValue.toLowerCase());
+  const keyword = inputValue.toLowerCase();
+  return (
+    (option.nickname ?? '').toLowerCase().includes(keyword) ||
+    (option.username ?? '').toLowerCase().includes(keyword)
+  );
 }
 
 /** 处理部门树展开/折叠 */
