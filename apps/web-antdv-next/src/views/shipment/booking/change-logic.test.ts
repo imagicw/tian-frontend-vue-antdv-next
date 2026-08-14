@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  canActOnBookingOrders,
   canChangeBooking,
-  canCoordinateChange,
   canInitiateChange,
   canModifyBooking,
+  canPublishChange,
+  canWithdrawChange,
   canWithdrawChangeOrder,
   isOrderOwner,
   resolveRemoveOrderStrategy,
@@ -88,20 +90,42 @@ describe('canInitiateChange', () => {
   });
 });
 
-describe('canCoordinateChange', () => {
-  it('allows the change initiator or the booking applicant to withdraw/publish', () => {
-    expect(
-      canCoordinateChange(5, { initiatorId: 5 }, { applicantId: 10 }),
-    ).toBe(true);
-    expect(
-      canCoordinateChange(10, { initiatorId: 5 }, { applicantId: 10 }),
-    ).toBe(true);
+describe('canWithdrawChange', () => {
+  it('allows the change initiator or the booking applicant', () => {
+    expect(canWithdrawChange(5, { initiatorId: 5 }, { applicantId: 10 })).toBe(
+      true,
+    );
+    expect(canWithdrawChange(10, { initiatorId: 5 }, { applicantId: 10 })).toBe(
+      true,
+    );
   });
 
   it('rejects a bystander', () => {
-    expect(
-      canCoordinateChange(99, { initiatorId: 5 }, { applicantId: 10 }),
-    ).toBe(false);
+    expect(canWithdrawChange(99, { initiatorId: 5 }, { applicantId: 10 })).toBe(
+      false,
+    );
+  });
+});
+
+describe('canPublishChange', () => {
+  it('allows only the booking applicant ("创建人"), not merely the change initiator', () => {
+    expect(canPublishChange(10, { applicantId: 10 })).toBe(true);
+    expect(canPublishChange(5, { applicantId: 10 })).toBe(false);
+  });
+});
+
+describe('canActOnBookingOrders', () => {
+  it('allows PO actions while draft/rejected (direct) or submitted/confirmed (via change)', () => {
+    expect(canActOnBookingOrders(0)).toBe(true);
+    expect(canActOnBookingOrders(3)).toBe(true);
+    expect(canActOnBookingOrders(1)).toBe(true);
+    expect(canActOnBookingOrders(2)).toBe(true);
+  });
+
+  it('hides PO actions for cancelled/shipped bookings — no path succeeds there', () => {
+    expect(canActOnBookingOrders(4)).toBe(false);
+    expect(canActOnBookingOrders(6)).toBe(false);
+    expect(canActOnBookingOrders(undefined)).toBe(false);
   });
 });
 

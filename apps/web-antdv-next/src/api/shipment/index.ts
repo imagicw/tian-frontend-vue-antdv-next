@@ -187,7 +187,6 @@ export namespace ShipmentApi {
     productionLocationName?: string;
     /** 创建人用户ID（字符串形式），用于判断当前用户是否为该 PO 的责任人 */
     creator?: string;
-    salesUserName?: string;
   }
 
   export interface ShipmentOrderPageParams {
@@ -818,11 +817,6 @@ export function saveSplitPlan(data: {
   }>;
 }) {
   return requestClient.post(`${BASE}/split/save-plan`, data);
-}
-export function resetSplitPlan(bookingId: number) {
-  return requestClient.post(`${BASE}/split/reset-plan`, null, {
-    params: { bookingId },
-  });
 }
 export function recommendHangingContainerCount(params: {
   clientCode: string;

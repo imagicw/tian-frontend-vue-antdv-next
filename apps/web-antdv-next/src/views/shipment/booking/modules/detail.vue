@@ -4,6 +4,7 @@ import type { DescriptionItemSchema } from '#/components/description';
 import { computed, h, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { useAccess } from '@vben/access';
 import { useVbenModal } from '@vben/common-ui';
 import { useUserStore } from '@vben/stores';
 
@@ -33,9 +34,11 @@ import {
 import { useDescription } from '#/components/description';
 
 import {
+  canActOnBookingOrders,
   canChangeBooking,
-  canCoordinateChange,
   canInitiateChange,
+  canPublishChange,
+  canWithdrawChange,
   isOrderOwner,
   resolveRemoveOrderStrategy,
 } from '../change-logic';
@@ -45,6 +48,7 @@ import ChangeOrderForm from './change-order-form.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
+const { hasAccessByCodes } = useAccess();
 const bookingDetail = ref<any>(null);
 const loading = ref(false);
 
@@ -59,10 +63,25 @@ const showChangePanel = computed(() =>
 );
 
 function canRemove(order: any) {
-  return isOrderOwner(currentUserId.value, order);
+  if (
+    !canActOnBookingOrders(bookingDetail.value?.status) ||
+    !isOrderOwner(currentUserId.value, order)
+  ) {
+    return false;
+  }
+  const strategy = resolveRemoveOrderStrategy(bookingDetail.value?.status);
+  return hasAccessByCodes([
+    strategy === 'direct'
+      ? 'container:booking:update'
+      : 'container:booking:change',
+  ]);
 }
 function canEditViaChange(order: any) {
-  return showChangePanel.value && isOrderOwner(currentUserId.value, order);
+  return (
+    showChangePanel.value &&
+    isOrderOwner(currentUserId.value, order) &&
+    hasAccessByCodes(['container:booking:change'])
+  );
 }
 
 function promptReason(title: string, onOk: (reason: string) => Promise<void>) {
@@ -208,14 +227,20 @@ async function handleGoSplitChange() {
 function canInitiate() {
   return canInitiateChange(currentUserId.value, bookingDetail.value ?? {});
 }
-function canCoordinate() {
+function canWithdraw() {
   return (
     !!pendingChange.value &&
-    canCoordinateChange(
+    canWithdrawChange(
       currentUserId.value,
       pendingChange.value,
       bookingDetail.value ?? {},
     )
+  );
+}
+function canPublish() {
+  return (
+    !!pendingChange.value &&
+    canPublishChange(currentUserId.value, bookingDetail.value ?? {})
   );
 }
 
@@ -386,7 +411,7 @@ const [Modal, modalApi] = useVbenModal({
               调整分柜方案
             </Button>
             <Button
-              v-if="canCoordinate()"
+              v-if="canWithdraw()"
               v-access:code="['container:booking:change']"
               size="small"
               danger
@@ -395,7 +420,7 @@ const [Modal, modalApi] = useVbenModal({
               撤回整份变更
             </Button>
             <Button
-              v-if="canCoordinate()"
+              v-if="canPublish()"
               v-access:code="['container:booking:change:publish']"
               size="small"
               type="primary"

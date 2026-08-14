@@ -148,6 +148,28 @@ const derivedRods = computed(() =>
     configFor(allocationForm.value.containerType),
   ),
 );
+/** 该 PO 已在其它实际柜中分配的包数（不含本次表单正在填写的这一笔）。 */
+const priorHangingAllocations = computed(() =>
+  containers.value.flatMap((c) =>
+    (c.cargos ?? [])
+      .filter((cg) => cg.orderId === allocationForm.value.orderId)
+      .map((cg) => cg.allocatedPackages ?? 0),
+  ),
+);
+const hangingAllocationVerdict = computed(() => {
+  if (!isHangingMode.value || !allocationForm.value.allocatedPackages) {
+    return null;
+  }
+  return verifyHangingAllocationTotal(
+    selectedOrder.value?.hangingPackageCount ?? 0,
+    [...priorHangingAllocations.value, allocationForm.value.allocatedPackages],
+  );
+});
+const hangingRemainingPackages = computed(() => {
+  const total = selectedOrder.value?.hangingPackageCount ?? 0;
+  const allocated = priorHangingAllocations.value.reduce((a, b) => a + b, 0);
+  return total - allocated;
+});
 const targetContainerOptions = computed(() => [
   { label: '新建实际柜', value: 0 },
   ...containers.value.map((container) => ({
@@ -305,19 +327,9 @@ async function handleAllocateCartons() {
       message.warning('该柜型缺少挂装配置（每杆绳数/每绳包数），无法分配');
       return;
     }
-    const priorAllocations = containers.value.flatMap((c) =>
-      (c.cargos ?? [])
-        .filter((cg) => cg.orderId === orderId)
-        .map((cg) => cg.allocatedPackages ?? 0),
-    );
-    const totalPackages = selectedOrder.value?.hangingPackageCount ?? 0;
-    const verdict = verifyHangingAllocationTotal(totalPackages, [
-      ...priorAllocations,
-      allocatedPackages,
-    ]);
-    if (verdict === 'over') {
+    if (hangingAllocationVerdict.value === 'over') {
       message.warning(
-        `该 PO 挂装总包数为 ${totalPackages}，本次分配后将超出，请调整获配包数`,
+        `该 PO 挂装总包数为 ${selectedOrder.value?.hangingPackageCount ?? 0}，本次分配后将超出，请调整获配包数`,
       );
       return;
     }
@@ -620,6 +632,23 @@ onMounted(loadData);
               </FormItem>
             </Col>
           </Row>
+          <FormItem label="该 PO 分配进度">
+            <Tag
+              :color="
+                hangingAllocationVerdict === 'over'
+                  ? 'error'
+                  : hangingAllocationVerdict === 'ok'
+                    ? 'success'
+                    : 'default'
+              "
+            >
+              {{
+                selectedOrder
+                  ? `已分配 ${(selectedOrder.hangingPackageCount ?? 0) - hangingRemainingPackages} / ${selectedOrder.hangingPackageCount ?? 0} 包，本柜之外尚余 ${hangingRemainingPackages} 包`
+                  : '请先选择 PO'
+              }}
+            </Tag>
+          </FormItem>
           <FormItem>
             <Button size="small" @click="handleRecommendContainerCount">
               获取该柜型最少柜数建议
@@ -654,7 +683,9 @@ onMounted(loadData);
         <template v-if="isHangingMode">
           挂装分配按包数计算，派生杆数 = 获配包数 ÷（每杆绳数 ×
           每绳包数）；跨实际柜合计必须恰好覆盖 PO
-          包数，过分配/欠分配/非整数包将被拒绝。
+          包数——本次分配会被拦截超出部分（过分配）与非整数包，
+          尚未分配完的余量在“该 PO
+          分配进度”中提示，最终是否覆盖齐全由发布/出运前的后端校验把关。
         </template>
         <template v-else>
           箱号范围必须连续且不与已分配范围重叠；体积、重量与装载数量由后端按纸箱资料自动计算。
