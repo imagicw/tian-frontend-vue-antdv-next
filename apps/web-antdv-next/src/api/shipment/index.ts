@@ -681,6 +681,16 @@ export function updateContainer(data: {
 export function deleteContainer(id: number) {
   return requestClient.delete(`${BASE}/split/delete`, { params: { id } });
 }
+export function appendContainerCargos(data: {
+  cargos: Array<{
+    cartonNoFrom: number;
+    cartonNoTo: number;
+    orderId: number;
+  }>;
+  containerId: number;
+}) {
+  return requestClient.post(`${BASE}/split/append-cargos`, data);
+}
 export function saveSplitPlan(data: {
   bookingId: number;
   containers: Array<{

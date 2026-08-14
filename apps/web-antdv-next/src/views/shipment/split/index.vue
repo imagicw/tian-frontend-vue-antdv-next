@@ -28,6 +28,7 @@ import {
 } from 'antdv-next';
 
 import {
+  appendContainerCargos,
   createContainer,
   deleteContainer,
   getBookingDetail,
@@ -53,6 +54,7 @@ const allocationForm = ref({
   cartonNoTo: undefined as number | undefined,
   containerType: CONTAINER_TYPES[0]!,
   orderId: undefined as number | undefined,
+  targetContainerId: undefined as number | undefined,
 });
 
 const cartonOrderOptions = computed(() =>
@@ -75,6 +77,13 @@ const containerTypeOptions = CONTAINER_TYPES.map((containerType) => ({
   label: containerType,
   value: containerType,
 }));
+const targetContainerOptions = computed(() => [
+  { label: '新建实际柜', value: 0 },
+  ...containers.value.map((container) => ({
+    label: `第 ${container.containerSeq ?? container.id} 柜（${container.containerType}）`,
+    value: container.id,
+  })),
+]);
 
 async function loadData() {
   if (!bookingId.value) return;
@@ -103,13 +112,19 @@ function handleAddContainer() {
     cartonNoTo: undefined,
     containerType: CONTAINER_TYPES[0]!,
     orderId: undefined,
+    targetContainerId: undefined,
   };
   allocationVisible.value = true;
 }
 
 async function handleAllocateCartons() {
-  const { cartonNoFrom, cartonNoTo, containerType, orderId } =
-    allocationForm.value;
+  const {
+    cartonNoFrom,
+    cartonNoTo,
+    containerType,
+    orderId,
+    targetContainerId,
+  } = allocationForm.value;
   if (
     !orderId ||
     cartonNoFrom === null ||
@@ -123,11 +138,17 @@ async function handleAllocateCartons() {
   }
   allocationSubmitting.value = true;
   try {
-    await createContainer({
-      bookingId: bookingId.value,
-      containerType,
-      cargos: [{ cartonNoFrom, cartonNoTo, orderId }],
-    });
+    const cargo = { cartonNoFrom, cartonNoTo, orderId };
+    await (targetContainerId
+      ? appendContainerCargos({
+          containerId: targetContainerId,
+          cargos: [cargo],
+        })
+      : createContainer({
+          bookingId: bookingId.value,
+          containerType,
+          cargos: [cargo],
+        }));
     message.success('纸箱范围已分配');
     allocationVisible.value = false;
     await loadData();
@@ -318,7 +339,19 @@ onMounted(loadData);
       @ok="handleAllocateCartons"
     >
       <Form layout="vertical">
-        <FormItem label="箱型" required>
+        <FormItem label="目标实际柜">
+          <Select
+            v-model:value="allocationForm.targetContainerId"
+            :options="targetContainerOptions"
+            allow-clear
+            placeholder="不选择则新建实际柜"
+          />
+        </FormItem>
+        <FormItem
+          v-if="!allocationForm.targetContainerId"
+          label="箱型"
+          required
+        >
           <Select
             v-model:value="allocationForm.containerType"
             :options="containerTypeOptions"
