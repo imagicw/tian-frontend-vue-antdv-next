@@ -14,10 +14,14 @@ import {
   Col,
   Divider,
   Empty,
+  Form,
+  FormItem,
+  InputNumber,
   message,
   Modal,
   Popconfirm,
   Row,
+  Select,
   Spin,
   Table,
   Tag,
@@ -42,6 +46,35 @@ const loading = ref(false);
 const booking = ref<null | ShipmentApi.ShipmentBooking>(null);
 const containers = ref<ShipmentApi.ShipmentContainer[]>([]);
 const unallocatedPool = ref<ShipmentApi.ShipmentPlanOrder[]>([]);
+const allocationVisible = ref(false);
+const allocationSubmitting = ref(false);
+const allocationForm = ref({
+  cartonNoFrom: undefined as number | undefined,
+  cartonNoTo: undefined as number | undefined,
+  containerType: CONTAINER_TYPES[0]!,
+  orderId: undefined as number | undefined,
+});
+
+const cartonOrderOptions = computed(() =>
+  (booking.value?.orders ?? [])
+    .filter(
+      (order) =>
+        order.id !== null &&
+        order.id !== undefined &&
+        order.cartonNoFrom !== null &&
+        order.cartonNoFrom !== undefined &&
+        order.cartonNoTo !== null &&
+        order.cartonNoTo !== undefined,
+    )
+    .map((order) => ({
+      label: `${order.poNo ?? order.id}（箱号 ${order.cartonNoFrom} ~ ${order.cartonNoTo}）`,
+      value: order.id,
+    })),
+);
+const containerTypeOptions = CONTAINER_TYPES.map((containerType) => ({
+  label: containerType,
+  value: containerType,
+}));
 
 async function loadData() {
   if (!bookingId.value) return;
@@ -64,18 +97,43 @@ async function loadData() {
   }
 }
 
-async function handleAddContainer() {
-  Modal.confirm({
-    title: '添加集装箱',
-    content: '确认添加一个新集装箱吗？',
-    async onOk() {
-      const containerType = CONTAINER_TYPES[0];
-      if (!containerType) return;
-      await createContainer({ bookingId: bookingId.value, containerType });
-      message.success('添加成功');
-      await loadData();
-    },
-  });
+function handleAddContainer() {
+  allocationForm.value = {
+    cartonNoFrom: undefined,
+    cartonNoTo: undefined,
+    containerType: CONTAINER_TYPES[0]!,
+    orderId: undefined,
+  };
+  allocationVisible.value = true;
+}
+
+async function handleAllocateCartons() {
+  const { cartonNoFrom, cartonNoTo, containerType, orderId } =
+    allocationForm.value;
+  if (
+    !orderId ||
+    cartonNoFrom === null ||
+    cartonNoFrom === undefined ||
+    cartonNoTo === null ||
+    cartonNoTo === undefined ||
+    cartonNoFrom > cartonNoTo
+  ) {
+    message.warning('请选择 PO，并填写有效且连续的起止箱号');
+    return;
+  }
+  allocationSubmitting.value = true;
+  try {
+    await createContainer({
+      bookingId: bookingId.value,
+      containerType,
+      cargos: [{ cartonNoFrom, cartonNoTo, orderId }],
+    });
+    message.success('纸箱范围已分配');
+    allocationVisible.value = false;
+    await loadData();
+  } finally {
+    allocationSubmitting.value = false;
+  }
 }
 
 async function handleDeleteContainer(id: number) {
@@ -112,7 +170,9 @@ const containerColumns: TableColumnsType<ShipmentApi.ShipmentContainer> = [
     key: 'volumeUtilization',
     width: 110,
     render: (value: number) =>
-      value == null ? '-' : `${(value * 100).toFixed(1)}%`,
+      value === null || value === undefined
+        ? '-'
+        : `${(value * 100).toFixed(1)}%`,
   },
   {
     title: '操作',
@@ -182,6 +242,14 @@ onMounted(loadData);
               </Tag>
             </span>
             <span><b>客户：</b>{{ booking.clientName ?? booking.clientCode }}</span>
+            <span>
+              <b>纸箱分柜：</b>
+              {{
+                booking.cartonSplitTiming === 2
+                  ? '发布后（确认前完成）'
+                  : '发布前完成'
+              }}
+            </span>
             <span><b>货代：</b>{{ booking.freightForwarder ?? '-' }}</span>
             <span><b>船期：</b>{{ booking.vesselDate ?? '-' }}</span>
           </div>
@@ -192,8 +260,8 @@ onMounted(loadData);
             <Card title="集装箱列表" size="small">
               <template #extra>
                 <Button size="small" type="primary" @click="handleAddContainer">
-+ 添加集装箱
-</Button>
+                  分配纸箱到新箱
+                </Button>
               </template>
               <Empty v-if="containers.length === 0" description="暂无集装箱" />
               <div
@@ -211,8 +279,8 @@ onMounted(loadData);
                 />
                 <template v-if="container.cargos?.length">
                   <Divider title-placement="start" class="my-1 text-xs">
-货物明细
-</Divider>
+                    货物明细
+                  </Divider>
                   <Table
                     :data-source="container.cargos"
                     :pagination="false"
@@ -243,5 +311,51 @@ onMounted(loadData);
         </Row>
       </template>
     </Spin>
+    <Modal
+      v-model:open="allocationVisible"
+      :confirm-loading="allocationSubmitting"
+      title="分配纸箱到新集装箱"
+      @ok="handleAllocateCartons"
+    >
+      <Form layout="vertical">
+        <FormItem label="箱型" required>
+          <Select
+            v-model:value="allocationForm.containerType"
+            :options="containerTypeOptions"
+          />
+        </FormItem>
+        <FormItem label="PO（仅可维护本人负责的 PO）" required>
+          <Select
+            v-model:value="allocationForm.orderId"
+            :options="cartonOrderOptions"
+            placeholder="请选择纸箱 PO"
+            show-search
+          />
+        </FormItem>
+        <Row :gutter="12">
+          <Col :span="12">
+            <FormItem label="起始箱号" required>
+              <InputNumber
+                v-model:value="allocationForm.cartonNoFrom"
+                :min="1"
+                class="w-full"
+              />
+            </FormItem>
+          </Col>
+          <Col :span="12">
+            <FormItem label="结束箱号" required>
+              <InputNumber
+                v-model:value="allocationForm.cartonNoTo"
+                :min="1"
+                class="w-full"
+              />
+            </FormItem>
+          </Col>
+        </Row>
+      </Form>
+      <p class="text-xs text-gray-500">
+        箱号范围必须连续且不与已分配范围重叠；体积、重量与装载数量由后端按纸箱资料自动计算。
+      </p>
+    </Modal>
   </Page>
 </template>

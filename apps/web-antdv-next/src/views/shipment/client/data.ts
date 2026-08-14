@@ -15,6 +15,13 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ClientProfile>
       width: 140,
     },
     {
+      field: 'cartonSplitTiming',
+      title: '纸箱分柜关口',
+      width: 140,
+      formatter: ({ cellValue }) =>
+        cellValue === 2 ? '发布后分柜' : '发布前分柜',
+    },
+    {
       field: 'allowMultiLocation',
       title: '两地装货',
       width: 100,
@@ -25,14 +32,14 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ClientProfile>
       title: '国内提前期',
       width: 110,
       formatter: ({ cellValue }) =>
-        cellValue == null ? '-' : `${cellValue} 天`,
+        cellValue === null || cellValue === undefined ? '-' : `${cellValue} 天`,
     },
     {
       field: 'leadTimeOverseas',
       title: '海外提前期',
       width: 110,
       formatter: ({ cellValue }) =>
-        cellValue == null ? '-' : `${cellValue} 天`,
+        cellValue === null || cellValue === undefined ? '-' : `${cellValue} 天`,
     },
     {
       field: 'enabled',

@@ -12,6 +12,7 @@ export namespace ShipmentApi {
     allowedPorts?: string;
     allowedContainerTypes?: string;
     consolidationDeliveryDays?: number;
+    cartonSplitTiming?: 1 | 2;
     remark?: string;
     enabled: boolean;
   }
@@ -226,6 +227,8 @@ export namespace ShipmentApi {
     loadingRoute?: string;
     containerSeq?: number;
     totalVolume?: number;
+    minVolume?: number;
+    maxVolume?: number;
     totalCartons?: number;
     totalQty?: number;
     totalGrossWeight?: number;
@@ -246,6 +249,7 @@ export namespace ShipmentApi {
     clientName?: string;
     freightForwarder?: string;
     productionCountry?: string;
+    cartonSplitTiming?: 1 | 2;
     applicantId?: number;
     applicant?: string;
     bookerId?: number;
@@ -653,6 +657,11 @@ export function getUnallocatedCargoPool(bookingId: number) {
 }
 export function createContainer(data: {
   bookingId: number;
+  cargos?: Array<{
+    cartonNoFrom: number;
+    cartonNoTo: number;
+    orderId: number;
+  }>;
   containerType: string;
   loadingDate?: string;
   loadingRoute?: string;
@@ -671,6 +680,20 @@ export function updateContainer(data: {
 }
 export function deleteContainer(id: number) {
   return requestClient.delete(`${BASE}/split/delete`, { params: { id } });
+}
+export function saveSplitPlan(data: {
+  bookingId: number;
+  containers: Array<{
+    cargos?: Array<{
+      cartonNoFrom: number;
+      cartonNoTo: number;
+      orderId: number;
+    }>;
+    containerType: string;
+    id?: number;
+  }>;
+}) {
+  return requestClient.post(`${BASE}/split/save-plan`, data);
 }
 
 // ---- Cost Allocation ----
