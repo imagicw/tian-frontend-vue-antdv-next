@@ -73,6 +73,11 @@ export namespace ShipmentApi {
     containerType: string;
     minVolume: number;
     maxVolume: number;
+    minHangingRods?: number;
+    maxHangingRods?: number;
+    ropesPerRod?: number;
+    packagesPerRope?: number;
+    knotsPerRope?: number;
     sortOrder?: number;
     enabled: boolean;
   }
@@ -160,6 +165,7 @@ export namespace ShipmentApi {
     loadingFactoryId?: number;
     grossWeight?: number;
     netWeight?: number;
+    hangingPackageCount?: number;
     cartonUnit?: string;
     totalVolume?: number;
     warehouseDeliveryDate?: string;

@@ -116,6 +116,18 @@ const [Form, formApi] = useVbenForm({
       formItemClass: 'col-span-4',
     },
     {
+      fieldName: 'hangingPackageCount',
+      label: '挂装包数',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0, class: 'w-full' },
+      rules: 'required',
+      dependencies: {
+        triggerFields: ['shippingMode'],
+        show: (values) => values.shippingMode === 3,
+      },
+      formItemClass: 'col-span-2',
+    },
+    {
       fieldName: 'productionLocation',
       label: '生产地',
       component: 'RadioGroup',
