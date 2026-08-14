@@ -185,6 +185,9 @@ export namespace ShipmentApi {
     productionFactoryName?: string;
     loadingFactoryName?: string;
     productionLocationName?: string;
+    /** 创建人用户ID（字符串形式），用于判断当前用户是否为该 PO 的责任人 */
+    creator?: string;
+    salesUserName?: string;
   }
 
   export interface ShipmentOrderPageParams {
@@ -209,6 +212,7 @@ export namespace ShipmentApi {
     poNo?: string;
     cartonNoFrom?: number;
     cartonNoTo?: number;
+    allocatedPackages?: number;
     loadedCartons?: number;
     loadedQty?: number;
     loadedGrossWeight?: number;
@@ -268,6 +272,40 @@ export namespace ShipmentApi {
     orders?: ShipmentOrder[];
     containers?: ShipmentContainer[];
     orderIds?: number[];
+    pendingChange?: null | ShipmentBookingChange;
+  }
+
+  // ---- Booking Change (变更协作) ----
+  export const CHANGE_ACTION_UPDATE = 1;
+  export const CHANGE_ACTION_REMOVE = 2;
+  export const CHANGE_ACTION_ADD = 3;
+
+  export const CHANGE_STATUS_PENDING = 0;
+  export const CHANGE_STATUS_PUBLISHED = 1;
+  export const CHANGE_STATUS_WITHDRAWN = 2;
+
+  export interface ShipmentBookingChangeOrder {
+    id: number;
+    orderId: number;
+    action: number;
+    proposedOrderData?: string;
+    ownerUserId?: number;
+    delegatedForUserId?: number;
+    reason?: string;
+  }
+
+  export interface ShipmentBookingChange {
+    id: number;
+    bookingId: number;
+    status: number;
+    initiatorId?: number;
+    initiatorName?: string;
+    reason?: string;
+    proposedBookingData?: string;
+    proposedSplitPlanData?: string;
+    withdrawReason?: string;
+    createTime?: string;
+    orders?: ShipmentBookingChangeOrder[];
   }
 
   export interface ShipmentBookingPageParams {
@@ -510,9 +548,10 @@ export function getContainerConfigPage(
   return requestClient.get(`${BASE}/container-config/page`, { params });
 }
 export function getContainerConfigsByClientCode(clientCode: string) {
-  return requestClient.get(`${BASE}/container-config/list-by-client-code`, {
-    params: { clientCode },
-  });
+  return requestClient.get<ShipmentApi.ContainerConfig[]>(
+    `${BASE}/container-config/list-by-client-code`,
+    { params: { clientCode } },
+  );
 }
 export function createContainerConfig(
   data: Partial<ShipmentApi.ContainerConfig>,
@@ -641,6 +680,87 @@ export function cancelBooking(id: number, cancelReason: string) {
 export function shipBooking(id: number, remarks?: string) {
   return requestClient.post(`${BASE}/booking/ship`, { id, remarks });
 }
+export function removeBookingOrder(data: {
+  bookingId: number;
+  delegatedForUserId?: number;
+  orderId: number;
+  reason: string;
+}) {
+  return requestClient.post(`${BASE}/booking/order/remove`, data);
+}
+
+// ---- Booking Change (变更协作) ----
+export function createBookingChange(data: {
+  bookingId: number;
+  reason: string;
+}) {
+  return requestClient.post<number>(`${BASE}/booking/change/create`, data);
+}
+export function saveBookingChangeOrder(data: {
+  action: number;
+  changeId: number;
+  delegatedForUserId?: number;
+  order?: Partial<ShipmentApi.ShipmentOrder>;
+  orderId: number;
+  reason: string;
+}) {
+  return requestClient.put(`${BASE}/booking/change/order/save`, data);
+}
+export function saveBookingChangeHeader(data: {
+  blNo?: string;
+  ccUserIds?: string;
+  changeId: number;
+  closingDate?: string;
+  ensDate?: string;
+  freightForwarder: string;
+  productionCountry: string;
+  reason: string;
+  remarks?: string;
+  vesselDate?: string;
+}) {
+  return requestClient.put(`${BASE}/booking/change/header/save`, data);
+}
+export function saveBookingChangeSplitPlan(data: {
+  changeId: number;
+  reason: string;
+  splitPlan: {
+    bookingId: number;
+    containers: Array<{
+      cargos?: Array<{
+        allocatedPackages?: number;
+        cartonNoFrom?: number;
+        cartonNoTo?: number;
+        orderId: number;
+      }>;
+      containerType: string;
+      id?: number;
+    }>;
+  };
+}) {
+  return requestClient.put(`${BASE}/booking/change/split-plan/save`, data);
+}
+export function withdrawBookingChange(data: {
+  changeId: number;
+  orderId?: number;
+  reason: string;
+}) {
+  return requestClient.post(`${BASE}/booking/change/withdraw`, data);
+}
+export function publishBookingChange(changeId: number) {
+  return requestClient.post(`${BASE}/booking/change/publish`, { changeId });
+}
+export function getBookingChange(id: number) {
+  return requestClient.get<ShipmentApi.ShipmentBookingChange>(
+    `${BASE}/booking/change/get`,
+    { params: { id } },
+  );
+}
+export function getPendingBookingChange(bookingId: number) {
+  return requestClient.get<null | ShipmentApi.ShipmentBookingChange>(
+    `${BASE}/booking/change/get-pending`,
+    { params: { bookingId } },
+  );
+}
 
 // ---- Split (Container) ----
 export function getContainersByBooking(bookingId: number) {
@@ -655,13 +775,15 @@ export function getUnallocatedCargoPool(bookingId: number) {
     { params: { bookingId } },
   );
 }
+export interface SplitCargoInput {
+  allocatedPackages?: number;
+  cartonNoFrom?: number;
+  cartonNoTo?: number;
+  orderId: number;
+}
 export function createContainer(data: {
   bookingId: number;
-  cargos?: Array<{
-    cartonNoFrom: number;
-    cartonNoTo: number;
-    orderId: number;
-  }>;
+  cargos?: SplitCargoInput[];
   containerType: string;
   loadingDate?: string;
   loadingRoute?: string;
@@ -682,11 +804,7 @@ export function deleteContainer(id: number) {
   return requestClient.delete(`${BASE}/split/delete`, { params: { id } });
 }
 export function appendContainerCargos(data: {
-  cargos: Array<{
-    cartonNoFrom: number;
-    cartonNoTo: number;
-    orderId: number;
-  }>;
+  cargos: SplitCargoInput[];
   containerId: number;
 }) {
   return requestClient.post(`${BASE}/split/append-cargos`, data);
@@ -694,16 +812,31 @@ export function appendContainerCargos(data: {
 export function saveSplitPlan(data: {
   bookingId: number;
   containers: Array<{
-    cargos?: Array<{
-      cartonNoFrom: number;
-      cartonNoTo: number;
-      orderId: number;
-    }>;
+    cargos?: SplitCargoInput[];
     containerType: string;
     id?: number;
   }>;
 }) {
   return requestClient.post(`${BASE}/split/save-plan`, data);
+}
+export function resetSplitPlan(bookingId: number) {
+  return requestClient.post(`${BASE}/split/reset-plan`, null, {
+    params: { bookingId },
+  });
+}
+export function recommendHangingContainerCount(params: {
+  clientCode: string;
+  containerType: string;
+  freightForwarder?: string;
+  packageCount: number;
+  productionCountry?: string;
+}) {
+  return requestClient.get<number>(
+    `${BASE}/split/hanging/recommend-container-count`,
+    {
+      params,
+    },
+  );
 }
 
 // ---- Cost Allocation ----
