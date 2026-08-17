@@ -248,7 +248,7 @@ export function useClockFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: {
         maxlength: 255,
         placeholder: '请输入备注',

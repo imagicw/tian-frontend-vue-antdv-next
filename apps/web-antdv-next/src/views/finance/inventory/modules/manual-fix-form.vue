@@ -34,7 +34,7 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'reason',
       label: '修正原因',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { placeholder: '请填写修正原因', rows: 3 },
       rules: 'required',
     },
@@ -78,25 +78,17 @@ const [Modal, modalApi] = useVbenModal({
     <div v-if="inventory" class="mb-4">
       <Descriptions :column="2" size="small" bordered>
         <DescriptionsItem label="GT SKU">
-{{
-          inventory.gtSku
-        }}
-</DescriptionsItem>
+          {{ inventory.gtSku }}
+        </DescriptionsItem>
         <DescriptionsItem label="运编号">
-{{
-          inventory.shipmentNo
-        }}
-</DescriptionsItem>
+          {{ inventory.shipmentNo }}
+        </DescriptionsItem>
         <DescriptionsItem label="初始数量">
-{{
-          inventory.initialQuantity
-        }}
-</DescriptionsItem>
+          {{ inventory.initialQuantity }}
+        </DescriptionsItem>
         <DescriptionsItem label="当前剩余">
-{{
-          inventory.remainingQuantity
-        }}
-</DescriptionsItem>
+          {{ inventory.remainingQuantity }}
+        </DescriptionsItem>
       </Descriptions>
     </div>
     <Form class="mx-4" />

@@ -186,7 +186,7 @@ export function useFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       formItemClass: 'col-span-2',
       componentProps: {
         placeholder: '请输入备注',
@@ -547,7 +547,7 @@ export function useInterviewFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       formItemClass: 'col-span-2',
       componentProps: {
         placeholder: '请输入备注',
@@ -590,7 +590,7 @@ export function useInterviewResultFormSchema(
     {
       fieldName: 'cancelReason',
       label: '取消原因',
-      component: 'Textarea',
+      component: 'TextArea',
       rules: 'required',
       dependencies: {
         triggerFields: ['result'],
@@ -607,7 +607,7 @@ export function useInterviewResultFormSchema(
     {
       fieldName: 'evaluate',
       label: '面试评价',
-      component: 'Textarea',
+      component: 'TextArea',
       dependencies: {
         triggerFields: ['result'],
         show: (values) =>
@@ -757,7 +757,7 @@ export function useEliminateFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: {
         placeholder: '请输入备注',
         rows: 3,

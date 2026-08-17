@@ -430,7 +430,7 @@ export function useFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'description',
       label: '职位描述',
-      component: 'Textarea',
+      component: 'TextArea',
       formItemClass: 'col-span-2',
       componentProps: {
         placeholder: '请输入职位描述',
@@ -449,7 +449,7 @@ export function useStopFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'stopReason',
       label: '停止原因',
-      component: 'Textarea',
+      component: 'TextArea',
       rules: 'required',
       componentProps: {
         placeholder: '例如：岗位暂停',

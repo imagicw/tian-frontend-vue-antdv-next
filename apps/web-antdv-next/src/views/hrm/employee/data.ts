@@ -552,7 +552,7 @@ export function usePositionChangeFormSchema(
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       formItemClass: 'col-span-2',
       componentProps: {
         rows: 3,
@@ -737,7 +737,7 @@ export function useQuitFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       formItemClass: 'col-span-2',
       componentProps: { rows: 3, maxlength: 500, showCount: true },
     },
@@ -1061,7 +1061,7 @@ export function useEmployeeEntryFormSchema(
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       formItemClass: 'col-span-2',
       componentProps: { rows: 3, maxlength: 500, showCount: true },
     },
@@ -1202,7 +1202,7 @@ export function useCertificateFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { rows: 3, maxlength: 255, showCount: true },
     },
     {
@@ -1363,7 +1363,7 @@ export function useWorkFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '工作备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { rows: 3, maxlength: 500, showCount: true },
     },
     {
@@ -1442,7 +1442,7 @@ export function useTrainingFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { rows: 3, maxlength: 500, showCount: true },
     },
     {
@@ -1573,7 +1573,7 @@ export function useContractFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       formItemClass: 'col-span-2',
       componentProps: { rows: 3, maxlength: 255, showCount: true },
     },

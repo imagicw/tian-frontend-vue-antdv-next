@@ -81,7 +81,7 @@ export function useFormSchema(): VbenFormSchema[] {
     {
       fieldName: 'illustrate',
       label: '考核指标说明',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: {
         placeholder: '请输入考核指标说明',
         maxlength: 200,

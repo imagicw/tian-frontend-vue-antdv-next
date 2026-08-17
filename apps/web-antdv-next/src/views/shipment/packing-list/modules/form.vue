@@ -113,7 +113,7 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { rows: 3, placeholder: '备注信息' },
       formItemClass: 'col-span-4',
     },
