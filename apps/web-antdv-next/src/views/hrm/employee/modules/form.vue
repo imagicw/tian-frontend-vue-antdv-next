@@ -41,6 +41,7 @@ const createFieldVisibleMap = ref<Record<number, Set<string>>>({});
 const leaderEmployeeId = ref<number>();
 const userId = ref<number>();
 const candidateId = ref<number>();
+const employeeId = ref<number>();
 
 const modalTitle = computed(() => {
   if (formType.value === 'confirm') return '确认入职';
@@ -142,6 +143,7 @@ const [Modal, modalApi] = useVbenModal({
       const values = {
         ...(await formApi.getValues()),
         ...(await entryFormApi.getValues()),
+        id: employeeId.value,
         leaderEmployeeId: leaderEmployeeId.value,
         userId: userId.value,
         candidateId: candidateId.value,
@@ -191,6 +193,7 @@ const [Modal, modalApi] = useVbenModal({
     leaderEmployeeId.value = undefined;
     userId.value = undefined;
     candidateId.value = undefined;
+    employeeId.value = undefined;
     modalApi.lock();
     try {
       if (formType.value !== 'update') {
@@ -203,6 +206,7 @@ const [Modal, modalApi] = useVbenModal({
         leaderEmployeeId.value = employee.leaderEmployeeId;
         userId.value = employee.userId;
         candidateId.value = employee.candidateId;
+        employeeId.value = employee.id;
         if (formType.value === 'confirm') {
           await entryFormApi.setFieldValue(
             'entryStatus',
@@ -250,7 +254,7 @@ const [Modal, modalApi] = useVbenModal({
           </template>
         </Form>
       </TabPane>
-      <TabPane key="entry" tab="入职信息">
+      <TabPane key="entry" tab="入职信息" :force-render="true">
         <EntryForm class="mx-4 mt-2">
           <template #leaderEmployeeId>
             <EmployeeSelect
