@@ -27,9 +27,9 @@ import { getSimpleUserList } from '#/api/system/user';
 import { buildAdminWebSocketUrl } from '#/utils';
 
 const accessStore = useAccessStore();
-const refreshToken = accessStore.refreshToken as string;
+const accessToken = accessStore.accessToken as string;
 
-const server = ref(buildAdminWebSocketUrl(refreshToken)); // WebSocket 服务地址
+const server = ref(buildAdminWebSocketUrl(accessToken)); // WebSocket 服务地址
 const getIsOpen = computed(() => status.value === 'OPEN'); // WebSocket 连接是否打开
 const getTagColor = computed(() => (getIsOpen.value ? 'success' : 'red')); // WebSocket 连接的展示颜色
 const getStatusText = computed(() => (getIsOpen.value ? '已连接' : '未连接')); // 连接状态文本

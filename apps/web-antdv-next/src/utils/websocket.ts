@@ -1,8 +1,10 @@
 /**
  * 拼接管理端 `/infra/ws` 的连接地址
  *
- * 用 refreshToken 而不是 accessToken 鉴权：WebSocket 连接期间无法方便地刷新访问令牌。
+ * 用 accessToken 鉴权：后端 `TokenAuthenticationFilter` 只按
+ * `OAuth2TokenApi.checkAccessToken` 校验 token，只认 accessToken，
+ * refreshToken 传进去查不到记录，握手会直接返回 401 账号未登录。
  */
-export function buildAdminWebSocketUrl(refreshToken: string): string {
-  return `${`${import.meta.env.VITE_BASE_URL}/infra/ws`.replace('http', 'ws')}?token=${refreshToken}`;
+export function buildAdminWebSocketUrl(accessToken: string): string {
+  return `${`${import.meta.env.VITE_BASE_URL}/infra/ws`.replace('http', 'ws')}?token=${accessToken}`;
 }

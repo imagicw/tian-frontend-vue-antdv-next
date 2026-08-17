@@ -54,12 +54,12 @@ export const useNoticePushStore = defineStore('notice-push', () => {
       return;
     }
     const accessStore = useAccessStore();
-    const refreshToken = accessStore.refreshToken as string;
-    if (!refreshToken) {
+    const accessToken = accessStore.accessToken as string;
+    if (!accessToken) {
       return;
     }
     const { close: closeConnection } = useWebSocket(
-      buildAdminWebSocketUrl(refreshToken),
+      buildAdminWebSocketUrl(accessToken),
       {
         autoReconnect: true,
         heartbeat: true,
