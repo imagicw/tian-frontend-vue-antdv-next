@@ -3,7 +3,7 @@ import type { NotificationItem } from '@vben/layouts';
 
 import type { SystemTenantApi } from '#/api/system/tenant';
 
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { useAccess } from '@vben/access';
 import { AuthenticationLoginExpiredModal, useVbenModal } from '@vben/common-ui';
@@ -38,11 +38,12 @@ import {
 import { getSimpleTenantList } from '#/api/system/tenant';
 import { $t } from '#/locales';
 import { router } from '#/router';
-import { useAuthStore } from '#/store';
+import { useAuthStore, useNoticePushStore } from '#/store';
 import LoginForm from '#/views/_core/authentication/login.vue';
 
 const userStore = useUserStore();
 const authStore = useAuthStore();
+const noticePushStore = useNoticePushStore();
 const accessStore = useAccessStore();
 const { hasAccessByCodes } = useAccess();
 const { destroyWatermark, updateWatermark } = useWatermark();
@@ -200,6 +201,12 @@ onMounted(() => {
     },
     1000 * 60 * 2,
   );
+  // 建立通知公告推送的 WebSocket 连接
+  noticePushStore.connect();
+});
+
+onUnmounted(() => {
+  noticePushStore.disconnect();
 });
 
 const handleClick = (item: NotificationItem) => {

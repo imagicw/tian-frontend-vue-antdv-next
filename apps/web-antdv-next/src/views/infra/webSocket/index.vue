@@ -24,16 +24,12 @@ import {
 } from 'antdv-next';
 
 import { getSimpleUserList } from '#/api/system/user';
+import { buildAdminWebSocketUrl } from '#/utils';
 
 const accessStore = useAccessStore();
 const refreshToken = accessStore.refreshToken as string;
 
-const server = ref(
-  `${`${import.meta.env.VITE_BASE_URL}/infra/ws`.replace(
-    'http',
-    'ws',
-  )}?token=${refreshToken}`, // 使用 refreshToken，而不使用 accessToken 方法的原因：WebSocket 无法方便的刷新访问令牌
-); // WebSocket 服务地址
+const server = ref(buildAdminWebSocketUrl(refreshToken)); // WebSocket 服务地址
 const getIsOpen = computed(() => status.value === 'OPEN'); // WebSocket 连接是否打开
 const getTagColor = computed(() => (getIsOpen.value ? 'success' : 'red')); // WebSocket 连接的展示颜色
 const getStatusText = computed(() => (getIsOpen.value ? '已连接' : '未连接')); // 连接状态文本
