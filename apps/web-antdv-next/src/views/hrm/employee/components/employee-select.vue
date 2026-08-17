@@ -19,7 +19,7 @@ const props = withDefaults(
     disabled?: boolean;
     disabledIds?: number[];
     entryStatus?: number;
-    modelValue?: number | number[];
+    modelValue?: null | number | number[];
     multiple?: boolean;
     placeholder?: string;
     title?: string;
@@ -54,11 +54,16 @@ const showClear = computed(
     props.allowClear &&
     !props.disabled &&
     hovering.value &&
-    props.modelValue !== undefined,
+    props.modelValue !== undefined &&
+    props.modelValue !== null,
 );
 
-async function resolveItems(value?: number | number[]) {
-  const ids = Array.isArray(value) ? value : value === undefined ? [] : [value];
+async function resolveItems(value?: null | number | number[]) {
+  const ids = Array.isArray(value)
+    ? value
+    : value === undefined || value === null
+      ? []
+      : [value];
   if (ids.length === 0) {
     selectedItems.value = [];
     return;
