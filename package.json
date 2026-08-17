@@ -89,7 +89,7 @@
     "tsdown": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
+    "vite": "8.0.10",
     "vitest": "catalog:",
     "vue": "catalog:",
     "vue-tsc": "catalog:"
