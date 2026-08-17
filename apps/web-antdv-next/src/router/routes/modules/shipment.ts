@@ -98,6 +98,16 @@ const routes: RouteRecordRaw[] = [
       },
       {
         meta: {
+          access: ['container:booking:change'],
+          hideInMenu: true,
+          title: '订舱变更协作',
+        },
+        name: 'ShipmentBookingChange',
+        path: 'booking-change',
+        component: () => import('#/views/shipment/booking-change/index.vue'),
+      },
+      {
+        meta: {
           access: ['container:consolidation:suggest'],
           hideInMenu: true,
           title: '智能拼柜',
