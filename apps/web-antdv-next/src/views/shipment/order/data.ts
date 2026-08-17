@@ -42,7 +42,10 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOrder>
       width: 100,
       slots: {
         default: ({ row }) => {
-          const status = row.status == null ? '' : String(row.status);
+          const status =
+            row.status === undefined || row.status === null
+              ? ''
+              : String(row.status);
           return [
             h(
               Tag,
@@ -54,6 +57,7 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOrder>
       },
     },
     { field: 'totalVolume', title: '总体积(CBM)', width: 120 },
+    { field: 'hangingPackageCount', title: '挂装包数', width: 100 },
     { field: 'productionLocationName', title: '生产地', width: 80 },
     { field: 'loadingFactoryName', title: '装柜工厂', minWidth: 150 },
     { field: 'warehouseDeliveryDate', title: '仓库交货日', width: 130 },

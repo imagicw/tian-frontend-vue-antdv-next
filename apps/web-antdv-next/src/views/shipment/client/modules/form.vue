@@ -58,6 +58,19 @@ const [Form, formApi] = useVbenForm({
       componentProps: { min: 0, placeholder: '天数' },
     },
     {
+      fieldName: 'cartonSplitTiming',
+      label: '纸箱分柜关口',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '发布前分柜', value: 1 },
+          { label: '发布后分柜', value: 2 },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: 1,
+    },
+    {
       fieldName: 'leadTimeDomestic',
       label: '国内提前期(天)',
       component: 'InputNumber',

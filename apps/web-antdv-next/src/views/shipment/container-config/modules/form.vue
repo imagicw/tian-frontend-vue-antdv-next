@@ -68,6 +68,37 @@ const [Form, formApi] = useVbenForm({
       rules: 'required',
     },
     {
+      fieldName: 'minHangingRods',
+      label: '挂装最小杆数',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0 },
+      help: '纸箱配置可留空；挂装参数须全部填写。',
+    },
+    {
+      fieldName: 'maxHangingRods',
+      label: '挂装最大杆数',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0 },
+    },
+    {
+      fieldName: 'ropesPerRod',
+      label: '每杆绳数',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0 },
+    },
+    {
+      fieldName: 'packagesPerRope',
+      label: '每绳包数',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0 },
+    },
+    {
+      fieldName: 'knotsPerRope',
+      label: '每绳绳结数',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0 },
+    },
+    {
       fieldName: 'sortOrder',
       label: '排序',
       component: 'InputNumber',
