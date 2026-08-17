@@ -9,7 +9,7 @@ import { Tag } from 'antdv-next';
 
 export const BOOKING_STATUS_MAP: Record<
   string,
-  { color: string; text: string }
+  { color: string; text: string; }
 > = {
   '0': { text: '草稿', color: 'default' },
   '1': { text: '已提交', color: 'processing' },
@@ -22,22 +22,6 @@ export const BOOKING_STATUS_MAP: Record<
 export const BOOKING_TYPE_MAP: Record<number, string> = {
   1: '拼柜',
   2: '散货',
-};
-
-// 变更协作仅在"已提交(1)/已确认(2)"两个状态下可用——这两个值在
-// BOOKING_STATUS_MAP 与后端 BookingStatusEnum 之间是一致的，不受两者在
-// 4/5/6 上的编号分歧影响。
-export function canChangeBooking(status: string) {
-  return status === '1' || status === '2';
-}
-
-export const BOOKING_CHANGE_ORDER_ACTION_MAP: Record<
-  number,
-  { color: string; text: string }
-> = {
-  1: { text: '更新', color: 'processing' },
-  2: { text: '移出', color: 'error' },
-  3: { text: '新增', color: 'success' },
 };
 
 export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentBooking>['columns'] {
