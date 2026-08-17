@@ -93,6 +93,12 @@ const [Modal, modalApi] = useVbenModal({
         size="small"
         class="mb-4"
       />
+      <Tag v-if="bookingDetail?.pendingChange" color="processing" class="mb-4">
+        有待发布变更 · 发起人：{{
+          bookingDetail.pendingChange.initiatorName ||
+          bookingDetail.pendingChange.initiatorId
+        }}
+      </Tag>
       <template v-if="bookingDetail?.orders?.length">
         <Divider title-placement="start">关联订单</Divider>
         <Table

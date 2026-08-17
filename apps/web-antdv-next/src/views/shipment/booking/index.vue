@@ -20,7 +20,7 @@ import {
   submitBooking,
 } from '#/api/shipment';
 
-import { useGridColumns, useGridFormSchema } from './data';
+import { canChangeBooking, useGridColumns, useGridFormSchema } from './data';
 import BookingDetail from './modules/detail.vue';
 import BookingForm from './modules/form.vue';
 
@@ -51,6 +51,9 @@ function handleDetail(row: ShipmentApi.ShipmentBooking) {
 }
 function handleSplit(row: ShipmentApi.ShipmentBooking) {
   router.push(`/shipment/split?bookingId=${row.id}`);
+}
+function handleChange(row: ShipmentApi.ShipmentBooking) {
+  router.push(`/shipment/booking-change?bookingId=${row.id}`);
 }
 function handleSelectedSplit() {
   const row = selectedRows.value[0];
@@ -86,7 +89,7 @@ function confirmWithReason(
     async onOk() {
       if (!reason.trim()) {
         message.warning(`请输入${label}`);
-        throw undefined;
+        throw new Error('reason required');
       }
       await onOk(reason);
     },
@@ -208,6 +211,14 @@ function getBookingActions(row: ShipmentApi.ShipmentBooking): ActionItem[] {
     },
   ];
   const status = String(row.status);
+  if (canChangeBooking(status)) {
+    actions.push({
+      label: '变更协作',
+      type: 'link',
+      auth: ['container:booking:change'],
+      onClick: handleChange.bind(null, row),
+    });
+  }
   if (canSubmit(status)) {
     actions.push({
       label: '提交',

@@ -178,6 +178,10 @@ export namespace ShipmentApi {
     productionFactoryName?: string;
     loadingFactoryName?: string;
     productionLocationName?: string;
+    /** 创建人用户ID（字符串编码），用于前端判断当前用户是否为该 PO 的责任人 */
+    creator?: string;
+    /** 业务员（创建人昵称） */
+    salesUserName?: string;
   }
 
   export interface ShipmentOrderPageParams {
@@ -258,6 +262,35 @@ export namespace ShipmentApi {
     orders?: ShipmentOrder[];
     containers?: ShipmentContainer[];
     orderIds?: number[];
+    pendingChange?: BookingChange;
+  }
+
+  // ---- Booking change (变更协作) ----
+  export interface BookingChangeOrder {
+    id: number;
+    orderId: number;
+    /** 1=更新 2=移出 3=新增 */
+    action: 1 | 2 | 3;
+    /** 拟议订单数据（action=1/3 时非空），已按 JSON 解析 */
+    proposedOrder?: ShipmentOrder;
+    ownerUserId?: number;
+    delegatedForUserId?: number;
+    reason?: string;
+  }
+
+  export interface BookingChange {
+    id: number;
+    bookingId: number;
+    /** 0=待发布 1=已发布 2=已撤回 */
+    status: 0 | 1 | 2;
+    initiatorId?: number;
+    initiatorName?: string;
+    reason?: string;
+    proposedBooking?: Partial<ShipmentBooking>;
+    proposedSplitPlan?: unknown;
+    withdrawReason?: string;
+    createTime?: string;
+    orders: BookingChangeOrder[];
   }
 
   export interface ShipmentBookingPageParams {
@@ -630,6 +663,113 @@ export function cancelBooking(id: number, cancelReason: string) {
 }
 export function shipBooking(id: number, remarks?: string) {
   return requestClient.post(`${BASE}/booking/ship`, { id, remarks });
+}
+
+// ---- Booking change (变更协作) ----
+interface RawBookingChangeOrder {
+  id: number;
+  orderId: number;
+  action: 1 | 2 | 3;
+  proposedOrderData?: null | string;
+  ownerUserId?: number;
+  delegatedForUserId?: number;
+  reason?: string;
+}
+
+interface RawBookingChange {
+  id: number;
+  bookingId: number;
+  status: 0 | 1 | 2;
+  initiatorId?: number;
+  initiatorName?: string;
+  reason?: string;
+  proposedBookingData?: null | string;
+  proposedSplitPlanData?: null | string;
+  withdrawReason?: string;
+  createTime?: string;
+  orders: RawBookingChangeOrder[];
+}
+
+function parseBookingChange(
+  raw: null | RawBookingChange,
+): ShipmentApi.BookingChange | undefined {
+  if (!raw) return undefined;
+  return {
+    ...raw,
+    proposedBooking: raw.proposedBookingData
+      ? JSON.parse(raw.proposedBookingData)
+      : undefined,
+    proposedSplitPlan: raw.proposedSplitPlanData
+      ? JSON.parse(raw.proposedSplitPlanData)
+      : undefined,
+    orders: raw.orders.map((order) => ({
+      ...order,
+      proposedOrder: order.proposedOrderData
+        ? JSON.parse(order.proposedOrderData)
+        : undefined,
+    })),
+  };
+}
+
+export async function createBookingChange(bookingId: number, reason: string) {
+  return requestClient.post<number>(`${BASE}/booking/change/create`, {
+    bookingId,
+    reason,
+  });
+}
+
+export async function getBookingChange(id: number) {
+  const raw = await requestClient.get<RawBookingChange>(
+    `${BASE}/booking/change/get`,
+    { params: { id } },
+  );
+  return parseBookingChange(raw);
+}
+
+export async function getPendingBookingChange(bookingId: number) {
+  const raw = await requestClient.get<null | RawBookingChange>(
+    `${BASE}/booking/change/get-pending`,
+    { params: { bookingId } },
+  );
+  return parseBookingChange(raw);
+}
+
+export function saveBookingChangeOrder(data: {
+  action: 1 | 2 | 3;
+  changeId: number;
+  delegatedForUserId?: number;
+  order?: Partial<ShipmentApi.ShipmentOrder>;
+  orderId: number;
+  reason: string;
+}) {
+  return requestClient.put(`${BASE}/booking/change/order/save`, data);
+}
+
+export function saveBookingChangeHeader(data: {
+  blNo?: string;
+  ccUserIds?: string;
+  changeId: number;
+  closingDate?: string;
+  ensDate?: string;
+  freightForwarder: string;
+  productionCountry: string;
+  reason: string;
+  remarks?: string;
+  vesselDate?: string;
+}) {
+  return requestClient.put(`${BASE}/booking/change/header/save`, data);
+}
+
+export function withdrawBookingChange(data: {
+  changeId: number;
+  orderId?: number;
+  reason: string;
+}) {
+  return requestClient.post(`${BASE}/booking/change/withdraw`, data);
+}
+
+export function publishBookingChange(changeId: number) {
+  return requestClient.post(`${BASE}/booking/change/publish`, { changeId });
 }
 
 // ---- Split (Container) ----
