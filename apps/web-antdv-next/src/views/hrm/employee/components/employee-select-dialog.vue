@@ -208,36 +208,39 @@ defineExpose({ open: handleOpen });
     v-model:open="open"
     :footer="null"
     title="选择员工"
-    width="960px"
+    width="1100px"
     destroy-on-close
   >
-    <div class="mb-3 flex gap-3">
+    <div class="flex gap-3">
       <DeptTreeSelect
-        class="w-56"
+        class="w-56 shrink-0"
+        style="
+
+--dept-tree-max-height: 420px"
         placeholder="按部门筛选"
         @select="handleDeptSelect"
       />
+      <Grid class="min-w-0 flex-1">
+        <template #radio="{ row }">
+          <Radio
+            :checked="selectedRadioId === row.id"
+            :disabled="isRowDisabled(row as HrmEmployeeApi.Employee)"
+            @change="
+              () => {
+                selectedRadioId = row.id;
+                selectedRadioRow = row as HrmEmployeeApi.Employee;
+              }
+            "
+          />
+        </template>
+        <template #entryStatus="{ row }">
+          <DictTag
+            :type="DICT_TYPE.HRM_EMPLOYEE_ENTRY_STATUS"
+            :value="row.entryStatus"
+          />
+        </template>
+      </Grid>
     </div>
-    <Grid>
-      <template #radio="{ row }">
-        <Radio
-          :checked="selectedRadioId === row.id"
-          :disabled="isRowDisabled(row as HrmEmployeeApi.Employee)"
-          @change="
-            () => {
-              selectedRadioId = row.id;
-              selectedRadioRow = row as HrmEmployeeApi.Employee;
-            }
-          "
-        />
-      </template>
-      <template #entryStatus="{ row }">
-        <DictTag
-          :type="DICT_TYPE.HRM_EMPLOYEE_ENTRY_STATUS"
-          :value="row.entryStatus"
-        />
-      </template>
-    </Grid>
     <div class="mt-4 flex justify-end gap-2">
       <Button @click="open = false">取消</Button>
       <Button type="primary" @click="handleConfirm">确定</Button>

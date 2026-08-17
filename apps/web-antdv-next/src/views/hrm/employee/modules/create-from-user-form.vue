@@ -7,8 +7,17 @@ import { ref } from 'vue';
 import { useVbenModal } from '@vben/common-ui';
 import { DICT_TYPE } from '@vben/constants';
 import { getDictOptions } from '@vben/hooks';
+import { fromTimestampPickerValue, toTimestampPickerValue } from '@vben/utils';
 
-import { Button, Input, InputNumber, message, Select, Table } from 'antdv-next';
+import {
+  Button,
+  DatePicker,
+  Input,
+  InputNumber,
+  message,
+  Select,
+  Table,
+} from 'antdv-next';
 
 import { createEmployeeList, getBoundUserIdList } from '#/api/hrm/employee';
 import {
@@ -16,7 +25,7 @@ import {
   HrmEmployeeStatus,
   HrmEmployeeType,
 } from '#/views/hrm/utils/constants';
-import { DeptTreeSelect } from '#/views/system/dept/components';
+import { DeptSelect } from '#/views/system/dept/components';
 import { UserSelect } from '#/views/system/user/components';
 
 import EmployeeSelect from '../components/employee-select.vue';
@@ -184,7 +193,7 @@ defineExpose({ open });
           <Input v-model:value="record.mobile" placeholder="请输入手机号" />
         </template>
         <template v-else-if="column.key === 'deptId'">
-          <DeptTreeSelect v-model="record.deptId" class="w-full" />
+          <DeptSelect v-model="record.deptId" />
         </template>
         <template v-else-if="column.key === 'jobNumber'">
           <Input v-model:value="record.jobNumber" placeholder="请输入工号" />
@@ -196,7 +205,16 @@ defineExpose({ open });
           <Input v-model:value="record.postName" placeholder="请输入职位" />
         </template>
         <template v-else-if="column.key === 'entryTime'">
-          <InputNumber v-model:value="record.entryTime" class="!w-full" />
+          <DatePicker
+            class="!w-full"
+            format="YYYY-MM-DD HH:mm:ss"
+            show-time
+            value-format="x"
+            :value="toTimestampPickerValue(record.entryTime)"
+            @update:value="
+              record.entryTime = fromTimestampPickerValue($event) ?? 0
+            "
+          />
         </template>
         <template v-else-if="column.key === 'type'">
           <Select
@@ -210,6 +228,7 @@ defineExpose({ open });
           <InputNumber
             v-if="record.type === HrmEmployeeType.FORMAL"
             v-model:value="record.probation"
+            addon-after="月"
             :max="6"
             :min="0"
             class="!w-full"

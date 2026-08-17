@@ -83,23 +83,30 @@ onMounted(async () => {
       </template>
     </Input>
     <Spin :spinning="loading" :classes="{ root: 'w-full' }">
-      <Tree
-        v-if="deptTree.length > 0"
-        v-model:selected-keys="selectedKeys"
-        class="dept-tree pt-2"
-        :default-expand-all="true"
-        :field-names="{ title: 'name', key: 'id', children: 'children' }"
-        :tree-data="deptTree"
-        @select="handleSelect"
-      />
-      <div v-else-if="!loading" class="py-4 text-center text-gray-500">
-        暂无数据
+      <div class="dept-tree-scroll">
+        <Tree
+          v-if="deptTree.length > 0"
+          v-model:selected-keys="selectedKeys"
+          class="dept-tree pt-2"
+          :default-expand-all="true"
+          :field-names="{ title: 'name', key: 'id', children: 'children' }"
+          :tree-data="deptTree"
+          @select="handleSelect"
+        />
+        <div v-else-if="!loading" class="py-4 text-center text-gray-500">
+          暂无数据
+        </div>
       </div>
     </Spin>
   </div>
 </template>
 
 <style lang="scss" scoped>
+.dept-tree-scroll {
+  max-height: var(--dept-tree-max-height, 520px);
+  overflow-y: auto;
+}
+
 .dept-tree {
   min-width: 0;
 
