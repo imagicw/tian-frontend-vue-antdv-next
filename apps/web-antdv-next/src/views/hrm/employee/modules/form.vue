@@ -254,7 +254,8 @@ const [Modal, modalApi] = useVbenModal({
           </template>
         </Form>
       </TabPane>
-      <TabPane key="entry" tab="入职信息" :force-render="true">
+      <!-- eslint-disable-next-line vue/attribute-hyphenation -->
+      <TabPane key="entry" tab="入职信息" :forceRender="true">
         <EntryForm class="mx-4 mt-2">
           <template #leaderEmployeeId>
             <EmployeeSelect
