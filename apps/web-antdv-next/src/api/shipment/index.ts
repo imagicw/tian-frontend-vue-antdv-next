@@ -194,6 +194,7 @@ export namespace ShipmentApi {
     pageSize: number;
     poNo?: string;
     clientCode?: string;
+    destinationCountry?: string;
     shippingNumberId?: number;
     packingListId?: number;
     isFinalConfirmed?: boolean;
@@ -625,6 +626,7 @@ export function getNotBookedOrderPage(params: {
   clientCode?: string;
   deliveryDateEnd?: string;
   deliveryDateStart?: string;
+  destinationCountry?: string;
   pageNo: number;
   pageSize: number;
   poNo?: string;
@@ -640,8 +642,16 @@ export function updateOrder(
 ) {
   return requestClient.put(`${BASE}/order/update`, data);
 }
+export function saveOrderDraft(data: Partial<ShipmentApi.ShipmentOrder>) {
+  return requestClient.post(`${BASE}/order/save-draft`, data);
+}
 export function deleteOrder(id: number) {
   return requestClient.delete(`${BASE}/order/delete`, { params: { id } });
+}
+export function returnOrderToDraft(id: number) {
+  return requestClient.put(`${BASE}/order/return-to-draft`, undefined, {
+    params: { id },
+  });
 }
 export function publishOrderDraftBatch(ids: number[]) {
   return requestClient.put(`${BASE}/order/publish-draft-batch`, ids);

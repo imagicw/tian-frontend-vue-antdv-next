@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { VxeTableGridOptions } from '#/adapter/vxe-table';
+import type { ActionItem, VxeTableGridOptions } from '#/adapter/vxe-table';
 import type { ShipmentApi } from '#/api/shipment';
 
 import { ref } from 'vue';
@@ -13,8 +13,9 @@ import { ACTION_ICON, TableAction, useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
   confirmOrderFinalBatch,
   deleteOrder,
-  getNotBookedOrderPage,
+  getOrderPage,
   publishOrderDraftBatch,
+  returnOrderToDraft,
 } from '#/api/shipment';
 
 import { useGridColumns, useGridFormSchema } from './data';
@@ -50,15 +51,26 @@ async function handleDelete(row: ShipmentApi.ShipmentOrder) {
 }
 
 async function handlePublishDraft() {
-  const ids = selectedRows.value.map((r) => r.id);
+  const ids = selectedRows.value.filter((row) => row.isDraft).map((r) => r.id);
   if (ids.length === 0) {
-    message.warning('请先选择订单');
+    message.warning('请先选择草稿 PO');
     return;
   }
   const hide = message.loading({ content: '发布中...', duration: 0 });
   try {
     await publishOrderDraftBatch(ids);
     message.success('发布成功');
+    handleRefresh();
+  } finally {
+    hide();
+  }
+}
+
+async function handleReturnToDraft(row: ShipmentApi.ShipmentOrder) {
+  const hide = message.loading({ content: '转草稿中...', duration: 0 });
+  try {
+    await returnOrderToDraft(row.id);
+    message.success('已转为草稿');
     handleRefresh();
   } finally {
     hide();
@@ -86,8 +98,47 @@ function handleGoBooking() {
     message.warning('请先选择待订舱订单');
     return;
   }
+  if (
+    selectedRows.value.some((row) => row.isDraft || String(row.status) !== '5')
+  ) {
+    message.warning('仅已发布且未占用的 PO 可以发起订舱');
+    return;
+  }
   const orderIds = selectedRows.value.map((r) => r.id).join(',');
   router.push(`/shipment/booking?openCreate=1&orderIds=${orderIds}`);
+}
+
+function getOrderActions(row: ShipmentApi.ShipmentOrder): ActionItem[] {
+  const actions: ActionItem[] = [
+    {
+      label: '编辑',
+      type: 'link',
+      auth: ['container:order:update'],
+      onClick: handleEdit.bind(null, row),
+    },
+  ];
+  if (!row.isDraft && String(row.status) === '5') {
+    actions.push({
+      label: '转草稿',
+      type: 'link',
+      auth: ['container:order:update'],
+      onClick: handleReturnToDraft.bind(null, row),
+    });
+  }
+  if (row.isDraft) {
+    actions.push({
+      label: '删除',
+      type: 'link',
+      danger: true,
+      icon: ACTION_ICON.DELETE,
+      auth: ['container:order:delete'],
+      popConfirm: {
+        title: `确定删除草稿 PO「${row.poNo ?? row.id}」吗？`,
+        confirm: handleDelete.bind(null, row),
+      },
+    });
+  }
+  return actions;
 }
 
 const [Grid, gridApi] = useVbenVxeGrid({
@@ -98,15 +149,10 @@ const [Grid, gridApi] = useVbenVxeGrid({
     proxyConfig: {
       ajax: {
         query: async ({ page }, formValues) => {
-          const clientCode = formValues.clientCode?.trim();
-          if (!clientCode) {
-            return { list: [], total: 0 };
-          }
-          return getNotBookedOrderPage({
+          return getOrderPage({
             pageNo: page.currentPage,
             pageSize: page.pageSize,
             ...formValues,
-            clientCode,
           });
         },
       },
@@ -129,19 +175,19 @@ const [Grid, gridApi] = useVbenVxeGrid({
 <template>
   <Page auto-content-height>
     <FormModal @success="handleRefresh" />
-    <Grid table-title="订舱大厅 — 待订舱订单">
+    <Grid table-title="订舱大厅 — PO 生命周期">
       <template #toolbar-tools>
         <TableAction
           :actions="[
             {
-              label: '新建订单',
+              label: '新建 PO 草稿',
               type: 'primary',
               icon: ACTION_ICON.ADD,
               auth: ['container:order:create'],
               onClick: handleCreate,
             },
             {
-              label: '发布草稿',
+              label: '发布选中草稿',
               auth: ['container:order:update'],
               disabled: selectedRows.length === 0,
               onClick: handlePublishDraft,
@@ -163,27 +209,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
         />
       </template>
       <template #actions="{ row }">
-        <TableAction
-          :actions="[
-            {
-              label: '编辑',
-              type: 'link',
-              auth: ['container:order:update'],
-              onClick: handleEdit.bind(null, row),
-            },
-            {
-              label: '删除',
-              type: 'link',
-              danger: true,
-              icon: ACTION_ICON.DELETE,
-              auth: ['container:order:delete'],
-              popConfirm: {
-                title: `确定删除订单「${row.poNo}」吗？`,
-                confirm: handleDelete.bind(null, row),
-              },
-            },
-          ]"
-        />
+        <TableAction :actions="getOrderActions(row)" />
       </template>
     </Grid>
   </Page>

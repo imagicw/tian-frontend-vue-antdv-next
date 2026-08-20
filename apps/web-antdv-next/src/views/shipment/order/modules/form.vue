@@ -8,7 +8,7 @@ import { useVbenModal } from '@vben/common-ui';
 import { message } from 'antdv-next';
 
 import { useVbenForm } from '#/adapter/form';
-import { createOrder, updateOrder } from '#/api/shipment';
+import { saveOrderDraft, updateOrder } from '#/api/shipment';
 
 const emit = defineEmits<{ success: [] }>();
 
@@ -26,7 +26,6 @@ const [Form, formApi] = useVbenForm({
       label: 'PO号',
       component: 'Input',
       componentProps: { placeholder: '请输入PO号' },
-      rules: 'required',
       formItemClass: 'col-span-2',
     },
     {
@@ -41,7 +40,17 @@ const [Form, formApi] = useVbenForm({
       label: '客户代码',
       component: 'Input',
       componentProps: { placeholder: '请输入客户代码' },
-      rules: 'required',
+      formItemClass: 'col-span-2',
+    },
+    {
+      fieldName: 'packingListId',
+      label: '装箱单ID',
+      component: 'InputNumber',
+      componentProps: {
+        min: 1,
+        class: 'w-full',
+        placeholder: '关联装箱单时填写',
+      },
       formItemClass: 'col-span-2',
     },
     {
@@ -196,10 +205,12 @@ const [Modal, modalApi] = useVbenModal({
     modalApi.lock();
     const data = (await formApi.getValues()) as ShipmentApi.ShipmentOrder;
     try {
-      await (data.id ? updateOrder(data) : createOrder(data));
+      await (data.id && !data.isDraft
+        ? updateOrder(data)
+        : saveOrderDraft(data));
       await modalApi.close();
       emit('success');
-      message.success('操作成功');
+      message.success(data.id && !data.isDraft ? '更新成功' : '草稿已保存');
     } finally {
       modalApi.unlock();
     }
@@ -215,7 +226,7 @@ const [Modal, modalApi] = useVbenModal({
 </script>
 
 <template>
-  <Modal :title="isEdit ? '编辑订单' : '新建订单'" class="w-[860px]">
+  <Modal :title="isEdit ? '编辑 PO' : '新建 PO 草稿'" class="w-[860px]">
     <Form class="mx-4" />
   </Modal>
 </template>

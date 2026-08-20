@@ -11,7 +11,7 @@ export const ORDER_STATUS_MAP: Record<string, { color: string; text: string }> =
   {
     '0': { text: '草稿', color: 'default' },
     '5': { text: '已发布', color: 'blue' },
-    '10': { text: '订舱中', color: 'processing' },
+    '10': { text: '已占用', color: 'processing' },
     '15': { text: '已提交', color: 'cyan' },
     '20': { text: '已确认', color: 'success' },
     '30': { text: '已出运', color: 'green' },
@@ -85,6 +85,12 @@ export function useGridFormSchema(): VbenFormSchema[] {
       label: '客户代码',
       component: 'Input',
       componentProps: { placeholder: '请输入客户代码' },
+    },
+    {
+      fieldName: 'destinationCountry',
+      label: '目的国',
+      component: 'Input',
+      componentProps: { placeholder: '请输入目的国' },
     },
     {
       fieldName: 'status',

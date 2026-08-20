@@ -19,7 +19,10 @@ const emit = defineEmits<{ success: [] }>();
 const orderOptions = ref<{ label: string; value: number }[]>([]);
 
 async function loadOrderOptions(clientCode: string) {
-  if (!clientCode) return;
+  if (!clientCode) {
+    orderOptions.value = [];
+    return;
+  }
   const res = await getNotBookedOrderPage({
     pageNo: 1,
     pageSize: 200,
@@ -67,7 +70,11 @@ const [Form, formApi] = useVbenForm({
       fieldName: 'clientCode',
       label: '客户代码',
       component: 'Input',
-      componentProps: { placeholder: '请输入客户代码' },
+      componentProps: {
+        placeholder: '请输入客户代码',
+        onChange: (event: Event) =>
+          loadOrderOptions((event.target as HTMLInputElement).value),
+      },
       rules: 'required',
       formItemClass: 'col-span-2',
     },
