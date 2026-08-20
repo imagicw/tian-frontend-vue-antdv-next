@@ -39,6 +39,16 @@ describe('isOrderOwner', () => {
     expect(isOrderOwner(undefined, { creator: '1024' })).toBe(false);
     expect(isOrderOwner(1024, { creator: undefined })).toBe(false);
   });
+
+  it('prefers responsibleUserId over creator once a handover has moved ownership', () => {
+    // Old creator no longer owns the PO after a data handover to a new responsible user.
+    expect(
+      isOrderOwner(1024, { creator: '1024', responsibleUserId: 2048 }),
+    ).toBe(false);
+    expect(
+      isOrderOwner(2048, { creator: '1024', responsibleUserId: 2048 }),
+    ).toBe(true);
+  });
 });
 
 describe('resolveRemoveOrderStrategy', () => {

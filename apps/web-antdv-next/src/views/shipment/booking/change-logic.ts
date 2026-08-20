@@ -9,14 +9,22 @@ export function canModifyBooking(status: number | string | undefined): boolean {
 }
 
 /**
- * 判断当前用户是否为该 PO 的责任人（PO 创建人）。
- * 与后端 validateChangeOrderEditor 的核心判定一致：仅比较创建人，不做管理员/授权代理的前端猜测。
+ * 判断当前用户是否为该 PO 的责任人。
+ * 与后端 OrderResponsibilityUtil 的核心判定一致：优先取 responsibleUserId（数据交接后的最新归属），
+ * 历史数据未回填时回退比较创建人；不做管理员/授权代理的前端猜测。
  */
 export function isOrderOwner(
   currentUserId: number | string | undefined,
-  order: Pick<ShipmentApi.ShipmentOrder, 'creator'>,
+  order: Pick<ShipmentApi.ShipmentOrder, 'creator' | 'responsibleUserId'>,
 ): boolean {
-  if (!currentUserId || !order.creator) return false;
+  if (!currentUserId) return false;
+  if (
+    order.responsibleUserId !== undefined &&
+    order.responsibleUserId !== null
+  ) {
+    return String(currentUserId) === String(order.responsibleUserId);
+  }
+  if (!order.creator) return false;
   return String(currentUserId) === order.creator;
 }
 

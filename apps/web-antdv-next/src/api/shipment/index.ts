@@ -185,8 +185,20 @@ export namespace ShipmentApi {
     productionFactoryName?: string;
     loadingFactoryName?: string;
     productionLocationName?: string;
-    /** 创建人用户ID（字符串形式），用于判断当前用户是否为该 PO 的责任人 */
+    /** 创建人用户ID（字符串形式），用于判断当前用户是否为该 PO 的创建人 */
     creator?: string;
+    /** 责任业务员用户ID（创建时默认等于创建人，仅可通过数据交接流程变更） */
+    responsibleUserId?: number;
+    /** 责任业务员昵称 */
+    responsibleUserName?: string;
+    /** 业务员（责任业务员昵称） */
+    salesUserName?: string;
+  }
+
+  export interface ShipmentOrderHandoverParams {
+    orderIds: number[];
+    reason: string;
+    toUserId: number;
   }
 
   export interface ShipmentOrderPageParams {
@@ -658,6 +670,11 @@ export function publishOrderDraftBatch(ids: number[]) {
 }
 export function confirmOrderFinalBatch(ids: number[]) {
   return requestClient.put(`${BASE}/order/confirm-final-batch`, ids);
+}
+export function handoverOrderResponsibility(
+  data: ShipmentApi.ShipmentOrderHandoverParams,
+) {
+  return requestClient.put(`${BASE}/order/handover-responsibility`, data);
 }
 
 // ---- Booking ----

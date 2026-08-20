@@ -20,11 +20,16 @@ import {
 
 import { useGridColumns, useGridFormSchema } from './data';
 import OrderForm from './modules/form.vue';
+import OrderHandover from './modules/handover.vue';
 
 const router = useRouter();
 const selectedRows = ref<ShipmentApi.ShipmentOrder[]>([]);
 const [FormModal, formModalApi] = useVbenModal({
   connectedComponent: OrderForm,
+  destroyOnClose: true,
+});
+const [HandoverModal, handoverModalApi] = useVbenModal({
+  connectedComponent: OrderHandover,
   destroyOnClose: true,
 });
 
@@ -93,6 +98,21 @@ async function handleConfirmFinal() {
   }
 }
 
+function handleLog(row: ShipmentApi.ShipmentOrder) {
+  router.push({
+    path: '/shipment/log',
+    query: { businessType: 'ORDER', businessId: row.id },
+  });
+}
+
+function handleHandover() {
+  if (selectedRows.value.length === 0) {
+    message.warning('请先选择需要交接的 PO');
+    return;
+  }
+  handoverModalApi.setData(selectedRows.value).open();
+}
+
 function handleGoBooking() {
   if (selectedRows.value.length === 0) {
     message.warning('请先选择待订舱订单');
@@ -115,6 +135,12 @@ function getOrderActions(row: ShipmentApi.ShipmentOrder): ActionItem[] {
       type: 'link',
       auth: ['container:order:update'],
       onClick: handleEdit.bind(null, row),
+    },
+    {
+      label: '交接记录',
+      type: 'link',
+      auth: ['container:operation-log:query'],
+      onClick: handleLog.bind(null, row),
     },
   ];
   if (!row.isDraft && String(row.status) === '5') {
@@ -175,6 +201,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
 <template>
   <Page auto-content-height>
     <FormModal @success="handleRefresh" />
+    <HandoverModal @success="handleRefresh" />
     <Grid table-title="订舱大厅 — PO 生命周期">
       <template #toolbar-tools>
         <TableAction
@@ -197,6 +224,12 @@ const [Grid, gridApi] = useVbenVxeGrid({
               auth: ['container:order:update'],
               disabled: selectedRows.length === 0,
               onClick: handleConfirmFinal,
+            },
+            {
+              label: '责任人交接',
+              auth: ['container:order:handover'],
+              disabled: selectedRows.length === 0,
+              onClick: handleHandover,
             },
             {
               label: '发起订舱',

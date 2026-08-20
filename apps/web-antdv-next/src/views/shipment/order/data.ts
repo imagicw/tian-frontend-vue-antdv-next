@@ -32,6 +32,7 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOrder>
     { field: 'poNo', title: 'PO号', width: 150, fixed: 'left' },
     { field: 'packId', title: 'Pack ID', width: 140 },
     { field: 'clientCode', title: '客户代码', width: 110 },
+    { field: 'responsibleUserName', title: '责任业务员', width: 110 },
     { field: 'shippingNo', title: '运编号', width: 130 },
     { field: 'destinationCountry', title: '目的国', width: 80 },
     { field: 'deliveryDate', title: '交期', width: 110 },
