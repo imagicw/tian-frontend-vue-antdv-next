@@ -681,17 +681,8 @@ export function updateBooking(
 export function deleteBooking(id: number) {
   return requestClient.delete(`${BASE}/booking/delete`, { params: { id } });
 }
-export function submitBooking(id: number, remarks?: string) {
-  return requestClient.post(`${BASE}/booking/submit`, { id, remarks });
-}
-export function confirmBooking(
-  id: number,
-  params?: { blNo?: string; closingDate?: string; remarks?: string },
-) {
-  return requestClient.post(`${BASE}/booking/confirm`, { id, ...params });
-}
-export function rejectBooking(id: number, rejectReason: string) {
-  return requestClient.post(`${BASE}/booking/reject`, { id, rejectReason });
+export function publishBooking(id: number, remarks?: string) {
+  return requestClient.post(`${BASE}/booking/publish`, { id, remarks });
 }
 export function cancelBooking(id: number, cancelReason: string) {
   return requestClient.post(`${BASE}/booking/cancel`, { id, cancelReason });

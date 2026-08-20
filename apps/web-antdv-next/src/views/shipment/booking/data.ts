@@ -9,14 +9,12 @@ import { Tag } from 'antdv-next';
 
 export const BOOKING_STATUS_MAP: Record<
   string,
-  { color: string; text: string; }
+  { color: string; text: string }
 > = {
   '0': { text: '草稿', color: 'default' },
-  '1': { text: '已提交', color: 'processing' },
-  '2': { text: '已确认', color: 'success' },
-  '3': { text: '已驳回', color: 'warning' },
-  '4': { text: '已出运', color: 'green' },
-  '5': { text: '已取消', color: 'error' },
+  '2': { text: '已生效', color: 'success' },
+  '4': { text: '已取消', color: 'error' },
+  '6': { text: '已出运', color: 'green' },
 };
 
 export const BOOKING_TYPE_MAP: Record<number, string> = {
