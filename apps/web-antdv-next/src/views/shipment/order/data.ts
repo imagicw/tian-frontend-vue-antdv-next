@@ -93,6 +93,18 @@ export function useGridFormSchema(): VbenFormSchema[] {
       componentProps: { placeholder: '请输入目的国' },
     },
     {
+      fieldName: 'deliveryDateStart',
+      label: '交期起始',
+      component: 'DatePicker',
+      componentProps: { valueFormat: 'YYYY-MM-DD' },
+    },
+    {
+      fieldName: 'deliveryDateEnd',
+      label: '交期截止',
+      component: 'DatePicker',
+      componentProps: { valueFormat: 'YYYY-MM-DD' },
+    },
+    {
       fieldName: 'status',
       label: '状态',
       component: 'Select',
