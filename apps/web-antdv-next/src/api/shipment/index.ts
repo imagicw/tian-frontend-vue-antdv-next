@@ -212,6 +212,8 @@ export namespace ShipmentApi {
     cartonNoFrom?: number;
     cartonNoTo?: number;
     allocatedPackages?: number;
+    /** 后端按该实际柜冻结的挂装参数派生的杆数。 */
+    allocatedRods?: number;
     loadedCartons?: number;
     loadedQty?: number;
     loadedGrossWeight?: number;
@@ -237,6 +239,14 @@ export namespace ShipmentApi {
     totalGrossWeight?: number;
     totalNetWeight?: number;
     volumeUtilization?: number;
+    /** 实际柜创建时冻结的挂装柜容参数。 */
+    minHangingRods?: number;
+    maxHangingRods?: number;
+    ropesPerRod?: number;
+    packagesPerRope?: number;
+    knotsPerRope?: number;
+    /** 该实际柜中所有挂装 PO 的派生杆数合计。 */
+    totalHangingRods?: number;
     cargos?: ShipmentContainerCargo[];
     createTime?: string;
   }

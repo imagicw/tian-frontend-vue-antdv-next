@@ -48,6 +48,7 @@ import {
   SHIPPING_MODE_FCL_HANGING,
   verifyHangingAllocationTotal,
 } from './hanging';
+import { buildLoadingManifest } from './loading-manifest';
 
 const CONTAINER_TYPES = ['40GP', '40HQ', '20GP'];
 
@@ -177,6 +178,13 @@ const targetContainerOptions = computed(() => [
     value: container.id,
   })),
 ]);
+const containersForDisplay = computed(() => {
+  const manifests = buildLoadingManifest(containers.value);
+  return containers.value.map((container, index) => ({
+    container,
+    manifest: manifests[index]!,
+  }));
+});
 
 async function loadData() {
   if (!bookingId.value) return;
@@ -467,7 +475,7 @@ const cargoColumns: TableColumnsType<ShipmentApi.ShipmentPlanOrder> = [
   },
 ];
 
-const loadedCargoColumns: TableColumnsType<ShipmentApi.ShipmentContainerCargo> =
+const cartonCargoColumns: TableColumnsType<ShipmentApi.ShipmentContainerCargo> =
   [
     { dataIndex: 'poNo', key: 'poNo', title: 'PO号' },
     {
@@ -480,6 +488,25 @@ const loadedCargoColumns: TableColumnsType<ShipmentApi.ShipmentContainerCargo> =
     { dataIndex: 'loadedQty', key: 'loadedQty', title: '已装数量' },
     { dataIndex: 'loadedVolume', key: 'loadedVolume', title: '已装体积' },
   ];
+
+const hangingCargoColumns: TableColumnsType<{
+  allocatedPackages?: number;
+  allocatedRods?: number;
+  id: number;
+  poNo?: string;
+}> = [
+  { dataIndex: 'poNo', key: 'poNo', title: 'PO号' },
+  {
+    dataIndex: 'allocatedPackages',
+    key: 'allocatedPackages',
+    title: '获配包数',
+  },
+  {
+    dataIndex: 'allocatedRods',
+    key: 'allocatedRods',
+    title: '派生杆数',
+  },
+];
 
 onMounted(loadData);
 </script>
@@ -535,7 +562,7 @@ onMounted(loadData);
               </template>
               <Empty v-if="containers.length === 0" description="暂无集装箱" />
               <div
-                v-for="container in containers"
+                v-for="{ container, manifest } in containersForDisplay"
                 v-else
                 :key="container.id"
                 class="mb-4"
@@ -547,16 +574,39 @@ onMounted(loadData);
                   size="small"
                   row-key="id"
                 />
+                <div
+                  v-if="manifest.cargoType === 'hanging'"
+                  class="mt-2 rounded bg-blue-50 px-3 py-2 text-sm text-blue-950"
+                >
+                  <strong>挂装装柜信息：</strong>
+                  {{ container.containerType }} · 总杆数
+                  {{ manifest.hanging?.totalRods ?? '-' }}
+                  · 每杆
+                  {{ manifest.hanging?.ropesPerRod ?? '-' }}
+                  绳 · 每绳
+                  {{ manifest.hanging?.packagesPerRope ?? '-' }}
+                  包 · 每绳
+                  {{ manifest.hanging?.knotsPerRope ?? '-' }}
+                  结
+                </div>
                 <template v-if="container.cargos?.length">
                   <Divider title-placement="start" class="my-1 text-xs">
                     货物明细
                   </Divider>
                   <Table
-                    :data-source="container.cargos"
+                    :data-source="
+                      manifest.cargoType === 'hanging'
+                        ? manifest.poAllocations
+                        : container.cargos
+                    "
                     :pagination="false"
                     size="small"
                     row-key="id"
-                    :columns="loadedCargoColumns"
+                    :columns="
+                      manifest.cargoType === 'hanging'
+                        ? hangingCargoColumns
+                        : cartonCargoColumns
+                    "
                   />
                 </template>
               </div>
