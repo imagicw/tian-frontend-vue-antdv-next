@@ -1,7 +1,7 @@
 import type { ShipmentApi } from '#/api/shipment';
 
-/** 订舱状态：草稿、已驳回时可直接修改订舱基础信息（后端 BookingStatusEnum.canModify）。 */
-const MODIFIABLE_BOOKING_STATUSES = new Set([0, 3]);
+/** 订舱状态：仅草稿时可直接修改订舱基础信息（后端 BookingStatusEnum.canModify）。 */
+const MODIFIABLE_BOOKING_STATUSES = new Set([0]);
 
 export function canModifyBooking(status: number | string | undefined): boolean {
   if (status === null || status === undefined) return false;
@@ -23,8 +23,8 @@ export function isOrderOwner(
 export type RemoveOrderStrategy = 'change' | 'direct';
 
 /**
- * 草稿/已驳回状态的订舱：移出立即生效（POST booking/order/remove）。
- * 已提交/已确认等其它状态：必须通过“待发布变更”协作草稿移出，发布后才生效。
+ * 草稿状态的订舱：移出立即生效（POST booking/order/remove）。
+ * 已发布等其它状态：必须通过“待发布变更”协作草稿移出，发布后才生效。
  */
 export function resolveRemoveOrderStrategy(
   bookingStatus: number | string | undefined,
@@ -42,8 +42,8 @@ export function canActOnBookingOrders(
   return canModifyBooking(bookingStatus) || canChangeBooking(bookingStatus);
 }
 
-/** 订舱状态：仅已提交、已确认可发起/协作变更（后端 validateBookingCanChange）。 */
-const CHANGEABLE_BOOKING_STATUSES = new Set([1, 2]);
+/** 订舱状态：仅已发布可发起/协作变更（后端 validateBookingCanChange）。 */
+const CHANGEABLE_BOOKING_STATUSES = new Set([2]);
 
 export function canChangeBooking(status: number | string | undefined): boolean {
   if (status === null || status === undefined) return false;

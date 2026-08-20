@@ -333,7 +333,6 @@ function useBookingDetailSchema(): DescriptionItemSchema[] {
     { field: 'ensDate', label: 'ENS日期' },
     { field: 'vesselDate', label: '船期' },
     { field: 'closingDate', label: '截关日期' },
-    { field: 'rejectReason', label: '驳回原因' },
     { field: 'cancelReason', label: '取消原因' },
     { field: 'remarks', label: '备注' },
     { field: 'createTime', label: '创建时间' },

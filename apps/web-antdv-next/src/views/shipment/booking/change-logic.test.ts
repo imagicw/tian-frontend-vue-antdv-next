@@ -13,14 +13,12 @@ import {
 } from './change-logic';
 
 describe('canModifyBooking', () => {
-  it('is modifiable for draft (0) and rejected (3)', () => {
+  it('is modifiable for draft (0)', () => {
     expect(canModifyBooking(0)).toBe(true);
     expect(canModifyBooking('0')).toBe(true);
-    expect(canModifyBooking(3)).toBe(true);
   });
 
-  it('is not modifiable for submitted/confirmed/cancelled/shipped or missing status', () => {
-    expect(canModifyBooking(1)).toBe(false);
+  it('is not modifiable for published/cancelled/shipped or missing status', () => {
     expect(canModifyBooking(2)).toBe(false);
     expect(canModifyBooking(4)).toBe(false);
     expect(canModifyBooking(6)).toBe(false);
@@ -44,23 +42,19 @@ describe('isOrderOwner', () => {
 });
 
 describe('resolveRemoveOrderStrategy', () => {
-  it('removes directly while the booking is still draft/rejected', () => {
+  it('removes directly while the booking is still draft', () => {
     expect(resolveRemoveOrderStrategy(0)).toBe('direct');
-    expect(resolveRemoveOrderStrategy(3)).toBe('direct');
   });
 
-  it('requires a change draft once the booking is submitted/confirmed', () => {
-    expect(resolveRemoveOrderStrategy(1)).toBe('change');
+  it('requires a change draft once the booking is published', () => {
     expect(resolveRemoveOrderStrategy(2)).toBe('change');
   });
 });
 
 describe('canChangeBooking', () => {
-  it('only allows collaboration while submitted/confirmed', () => {
-    expect(canChangeBooking(1)).toBe(true);
+  it('only allows collaboration while published', () => {
     expect(canChangeBooking(2)).toBe(true);
     expect(canChangeBooking(0)).toBe(false);
-    expect(canChangeBooking(3)).toBe(false);
     expect(canChangeBooking(4)).toBe(false);
     expect(canChangeBooking(6)).toBe(false);
   });
@@ -115,10 +109,8 @@ describe('canPublishChange', () => {
 });
 
 describe('canActOnBookingOrders', () => {
-  it('allows PO actions while draft/rejected (direct) or submitted/confirmed (via change)', () => {
+  it('allows PO actions while draft (direct) or published (via change)', () => {
     expect(canActOnBookingOrders(0)).toBe(true);
-    expect(canActOnBookingOrders(3)).toBe(true);
-    expect(canActOnBookingOrders(1)).toBe(true);
     expect(canActOnBookingOrders(2)).toBe(true);
   });
 
