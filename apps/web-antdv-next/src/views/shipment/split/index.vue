@@ -43,8 +43,16 @@ import {
 
 import { BOOKING_STATUS_MAP, BOOKING_TYPE_MAP } from '../booking/data';
 import {
+  buildChangeSplitPlan,
+  resolveCartonPlanOrders,
+  resolveChangeSnapshot,
+  validateCartonContainerCapacity,
+  validateCartonPlan,
+} from './carton-plan';
+import {
   deriveHangingRods,
   hasHangingConfig,
+  isMixedCargoContainer,
   SHIPPING_MODE_FCL_HANGING,
   verifyHangingAllocationTotal,
 } from './hanging';
@@ -59,6 +67,10 @@ const changeId = computed(() =>
 );
 const isChangeMode = computed(() => !!changeId.value);
 const changeReason = ref('');
+const changePlanDirty = ref(false);
+const change = ref<null | ShipmentApi.ShipmentBookingChange>(null);
+const nextDraftContainerId = ref(-1);
+const nextDraftCargoId = ref(-1);
 
 const loading = ref(false);
 const booking = ref<null | ShipmentApi.ShipmentBooking>(null);
@@ -76,9 +88,25 @@ const allocationForm = ref({
   orderId: undefined as number | undefined,
   targetContainerId: undefined as number | undefined,
 });
+const editingCargo = ref<{
+  cargoId: number;
+  containerId: number;
+}>();
 
+const effectiveBooking = computed(() =>
+  resolveChangeSnapshot(
+    booking.value,
+    isChangeMode.value ? change.value?.proposedBookingData : undefined,
+  ),
+);
+const effectiveOrders = computed(() =>
+  resolveCartonPlanOrders(
+    booking.value?.orders ?? [],
+    isChangeMode.value ? change.value?.orders : undefined,
+  ),
+);
 const selectedOrder = computed(() =>
-  (booking.value?.orders ?? []).find(
+  effectiveOrders.value.find(
     (order) => order.id === allocationForm.value.orderId,
   ),
 );
@@ -87,7 +115,7 @@ const isHangingMode = computed(
 );
 
 const cartonOrderOptions = computed(() =>
-  (booking.value?.orders ?? [])
+  effectiveOrders.value
     .filter(
       (order) =>
         order.id !== null &&
@@ -104,7 +132,7 @@ const cartonOrderOptions = computed(() =>
     })),
 );
 const hangingOrderOptions = computed(() =>
-  (booking.value?.orders ?? [])
+  effectiveOrders.value
     .filter(
       (order) =>
         order.id !== null &&
@@ -124,10 +152,10 @@ function configFor(containerType: string) {
   return containerConfigs.value.find(
     (c) =>
       c.containerType === containerType &&
-      (!booking.value?.freightForwarder ||
-        c.freightForwarder === booking.value.freightForwarder) &&
-      (!booking.value?.productionCountry ||
-        c.productionCountry === booking.value.productionCountry),
+      (!effectiveBooking.value?.freightForwarder ||
+        c.freightForwarder === effectiveBooking.value.freightForwarder) &&
+      (!effectiveBooking.value?.productionCountry ||
+        c.productionCountry === effectiveBooking.value.productionCountry),
   );
 }
 const containerTypeOptions = computed(() =>
@@ -213,68 +241,45 @@ async function loadData() {
     // 变更草稿模式：若该草稿此前已保存过分柜方案，以草稿内容为准回显（草稿未落到官方分柜表，
     // 聚合字段如总体积/利用率不可用，仅作为编辑基础）。
     if (isChangeMode.value) {
-      const change = await getBookingChange(changeId.value!);
-      if (change?.proposedSplitPlanData) {
-        const parsed = JSON.parse(change.proposedSplitPlanData);
+      change.value = await getBookingChange(changeId.value!);
+      if (change.value?.proposedSplitPlanData) {
+        const parsed = JSON.parse(change.value.proposedSplitPlanData);
         containers.value = (parsed.containers ?? []).map(
           (c: any, index: number) => ({
-            id: c.id,
-            bookingId: bookingId.value,
-            containerType: c.containerType,
-            containerSeq: index + 1,
-            cargos: c.cargos ?? [],
+            ...(() => {
+              const containerId = c.id ?? nextDraftContainerId.value--;
+              const config = configFor(c.containerType);
+              return {
+                id: containerId,
+                bookingId: bookingId.value,
+                containerType: c.containerType,
+                containerSeq: index + 1,
+                minVolume: config?.minVolume,
+                maxVolume: config?.maxVolume,
+                cargos: (c.cargos ?? []).map((cargo: any) => ({
+                  ...cargo,
+                  containerId,
+                  id: cargo.id ?? nextDraftCargoId.value--,
+                })),
+              };
+            })(),
           }),
         );
       }
+      changePlanDirty.value = false;
     }
   } finally {
     loading.value = false;
   }
 }
 
-/** 将当前实际柜列表 + 一次新增分配，转换为“保存整份分柜方案”所需的完整 containers 数组。 */
-function buildFullSplitPlanContainers(addition?: {
-  cargo: SplitCargoInput;
-  containerType: string;
-  targetContainerId?: number;
-}) {
-  const list: Array<{
-    cargos: SplitCargoInput[];
-    containerType: string;
-    id?: number;
-  }> = containers.value.map((c) => ({
-    id: c.id,
-    containerType: c.containerType,
-    cargos: (c.cargos ?? []).map((cg) => ({
-      orderId: cg.orderId,
-      cartonNoFrom: cg.cartonNoFrom,
-      cartonNoTo: cg.cartonNoTo,
-      allocatedPackages: cg.allocatedPackages,
-    })),
-  }));
-  if (addition) {
-    const target = addition.targetContainerId
-      ? list.find((c) => c.id === addition.targetContainerId)
-      : undefined;
-    if (target) {
-      target.cargos.push(addition.cargo);
-    } else {
-      list.push({
-        containerType: addition.containerType,
-        cargos: [addition.cargo],
-      });
-    }
-  }
-  return list;
-}
-
 async function saveChangeSplitPlan(
-  containersPayload: ReturnType<typeof buildFullSplitPlanContainers>,
+  splitPlan: ReturnType<typeof buildChangeSplitPlan>,
 ) {
   await saveBookingChangeSplitPlan({
     changeId: changeId.value!,
     reason: changeReason.value,
-    splitPlan: { bookingId: bookingId.value, containers: containersPayload },
+    splitPlan,
   });
 }
 
@@ -287,19 +292,150 @@ function handleAddContainer() {
     orderId: undefined,
     targetContainerId: undefined,
   };
+  editingCargo.value = undefined;
   recommendedCount.value = null;
   allocationVisible.value = true;
 }
 
+function updateChangePlanCargo(
+  cargo: SplitCargoInput,
+  containerType: string,
+  targetContainerId?: number,
+) {
+  const nextContainers = containers.value.map((container) => ({
+    ...container,
+    cargos: [...(container.cargos ?? [])],
+  }));
+  const previous = editingCargo.value;
+  if (previous) {
+    const previousContainer = nextContainers.find(
+      (container) => container.id === previous.containerId,
+    );
+    if (previousContainer) {
+      previousContainer.cargos = previousContainer.cargos.filter(
+        (item) => item.id !== previous.cargoId,
+      );
+    }
+  }
+  const target = targetContainerId
+    ? nextContainers.find((container) => container.id === targetContainerId)
+    : undefined;
+  const newContainerId = nextDraftContainerId.value--;
+  const cargoId = previous?.cargoId ?? nextDraftCargoId.value--;
+  const cargoWithId = {
+    ...cargo,
+    containerId: target?.id ?? newContainerId,
+    id: cargoId,
+  };
+  if (target) {
+    target.cargos.push(cargoWithId);
+  } else {
+    const config = configFor(containerType);
+    nextContainers.push({
+      bookingId: bookingId.value,
+      cargos: [cargoWithId],
+      containerSeq: nextContainers.length + 1,
+      containerType,
+      id: newContainerId,
+      maxVolume: config?.maxVolume,
+      minVolume: config?.minVolume,
+    });
+  }
+  containers.value = nextContainers.filter(
+    (container) => container.cargos.length > 0,
+  );
+  changePlanDirty.value = true;
+}
+
+function handleEditCartonCargo(
+  container: ShipmentApi.ShipmentContainer,
+  cargo: ShipmentApi.ShipmentContainerCargo,
+) {
+  if (
+    cargo.allocatedPackages !== undefined &&
+    cargo.allocatedPackages !== null
+  ) {
+    message.warning('挂装包数请使用挂装分柜流程维护');
+    return;
+  }
+  allocationForm.value = {
+    allocatedPackages: undefined,
+    cartonNoFrom: cargo.cartonNoFrom,
+    cartonNoTo: cargo.cartonNoTo,
+    containerType: container.containerType,
+    orderId: cargo.orderId,
+    targetContainerId: container.id,
+  };
+  editingCargo.value = { containerId: container.id, cargoId: cargo.id };
+  allocationVisible.value = true;
+}
+
+function handleDeleteCartonCargo(
+  container: ShipmentApi.ShipmentContainer,
+  cargo: ShipmentApi.ShipmentContainerCargo,
+) {
+  containers.value = containers.value
+    .map((item) =>
+      item.id === container.id
+        ? {
+            ...item,
+            cargos: (item.cargos ?? []).filter(
+              (itemCargo) => itemCargo.id !== cargo.id,
+            ),
+          }
+        : item,
+    )
+    .filter((item) => (item.cargos?.length ?? 0) > 0);
+  changePlanDirty.value = true;
+  message.success('已从变更草稿移除箱号范围，请保存完整方案后生效');
+}
+
+async function handleSaveChangeSplitPlan() {
+  if (!changeReason.value.trim()) {
+    message.warning('请先填写分柜方案变更原因');
+    return;
+  }
+  const cartonOrders = effectiveOrders.value.filter(
+    (order) => order.shippingMode !== SHIPPING_MODE_FCL_HANGING,
+  );
+  const issues = [
+    ...validateCartonPlan(cartonOrders, containers.value),
+    ...validateCartonContainerCapacity(cartonOrders, containers.value),
+  ];
+  if (issues.length > 0) {
+    message.error(
+      issues
+        .slice(0, 3)
+        .map((issue) => issue.message)
+        .join('；'),
+    );
+    return;
+  }
+  allocationSubmitting.value = true;
+  try {
+    await saveChangeSplitPlan(
+      buildChangeSplitPlan(bookingId.value, containers.value),
+    );
+    changePlanDirty.value = false;
+    message.success('完整分柜方案已保存为变更草稿，发布后才生效');
+    await loadData();
+  } finally {
+    allocationSubmitting.value = false;
+  }
+}
+
 async function handleRecommendContainerCount() {
-  if (!booking.value?.clientCode || !allocationForm.value.allocatedPackages) {
+  if (
+    !effectiveBooking.value?.clientCode ||
+    !allocationForm.value.allocatedPackages
+  ) {
     message.warning('请先选择柜型并填写获配包数');
     return;
   }
   recommendedCount.value = await recommendHangingContainerCount({
-    clientCode: booking.value.clientCode,
-    freightForwarder: booking.value.freightForwarder,
-    productionCountry: booking.value.productionCountry,
+    clientCode: effectiveBooking.value.clientCode,
+    freightForwarder: effectiveBooking.value.freightForwarder,
+    productionCountry: effectiveBooking.value.productionCountry,
     containerType: allocationForm.value.containerType,
     packageCount: allocationForm.value.allocatedPackages,
   });
@@ -356,14 +492,25 @@ async function handleAllocateCartons() {
     const cargo = isHangingMode.value
       ? { orderId, allocatedPackages }
       : { orderId, cartonNoFrom, cartonNoTo };
+    const targetContainer = containers.value.find(
+      (container) => container.id === targetContainerId,
+    );
+    if (
+      targetContainer &&
+      isMixedCargoContainer([...(targetContainer.cargos ?? []), cargo])
+    ) {
+      message.warning('同一实际柜不能混装纸箱货与挂装货');
+      return;
+    }
     if (isChangeMode.value) {
-      await saveChangeSplitPlan(
-        buildFullSplitPlanContainers({
-          cargo,
-          containerType,
-          targetContainerId: targetContainerId || undefined,
-        }),
+      updateChangePlanCargo(
+        cargo,
+        containerType,
+        targetContainerId || undefined,
       );
+      message.success('已更新本地变更草稿，请保存完整分柜方案');
+      allocationVisible.value = false;
+      return;
     } else {
       await (targetContainerId
         ? appendContainerCargos({
@@ -386,25 +533,12 @@ async function handleAllocateCartons() {
 
 async function handleDeleteContainer(container: ShipmentApi.ShipmentContainer) {
   if (isChangeMode.value) {
-    if (!changeReason.value.trim()) {
-      message.warning('请先填写分柜方案变更原因');
-      return;
-    }
-    // 变更草稿内的柜没有正式主键，按草稿内顺序号定位。
-    await saveChangeSplitPlan(
-      containers.value
-        .filter((c) => c.containerSeq !== container.containerSeq)
-        .map((c) => ({
-          id: c.id,
-          containerType: c.containerType,
-          cargos: (c.cargos ?? []).map((cg) => ({
-            orderId: cg.orderId,
-            cartonNoFrom: cg.cartonNoFrom,
-            cartonNoTo: cg.cartonNoTo,
-            allocatedPackages: cg.allocatedPackages,
-          })),
-        })),
+    containers.value = containers.value.filter(
+      (item) => item.id !== container.id,
     );
+    changePlanDirty.value = true;
+    message.success('已从变更草稿移除实际柜，请保存完整方案后生效');
+    return;
   } else {
     await deleteContainer(container.id);
   }
@@ -556,9 +690,25 @@ onMounted(loadData);
           <Col :span="16">
             <Card title="集装箱列表" size="small">
               <template #extra>
-                <Button size="small" type="primary" @click="handleAddContainer">
-                  新增分配
-                </Button>
+                <div class="flex gap-2">
+                  <Button
+                    v-if="isChangeMode"
+                    :disabled="!changePlanDirty"
+                    :loading="allocationSubmitting"
+                    size="small"
+                    type="primary"
+                    @click="handleSaveChangeSplitPlan"
+                  >
+                    保存完整方案
+                  </Button>
+                  <Button
+                    size="small"
+                    type="primary"
+                    @click="handleAddContainer"
+                  >
+                    新增分配
+                  </Button>
+                </div>
               </template>
               <Empty v-if="containers.length === 0" description="暂无集装箱" />
               <div
@@ -608,6 +758,25 @@ onMounted(loadData);
                         : cartonCargoColumns
                     "
                   />
+                  <div
+                    v-if="isChangeMode && manifest.cargoType === 'carton'"
+                    class="mt-2 flex flex-wrap gap-2"
+                  >
+                    <template v-for="cargo in container.cargos" :key="cargo.id">
+                      <Button
+                        size="small"
+                        @click="handleEditCartonCargo(container, cargo)"
+                      >
+                        编辑 {{ cargo.poNo ?? cargo.orderId }} 箱号
+                      </Button>
+                      <Popconfirm
+                        title="确定从变更草稿中移除此箱号范围？"
+                        @confirm="handleDeleteCartonCargo(container, cargo)"
+                      >
+                        <Button danger size="small">删除</Button>
+                      </Popconfirm>
+                    </template>
+                  </div>
                 </template>
               </div>
             </Card>
@@ -634,7 +803,7 @@ onMounted(loadData);
     <Modal
       v-model:open="allocationVisible"
       :confirm-loading="allocationSubmitting"
-      title="新增分配"
+      :title="editingCargo ? '编辑箱号范围' : '新增分配'"
       @ok="handleAllocateCartons"
     >
       <Form layout="vertical">

@@ -25,6 +25,7 @@ import {
 import {
   createBookingChange,
   getBookingDetail,
+  getContainerConfigsByClientCode,
   publishBookingChange,
   removeBookingOrder,
   saveBookingChangeOrder,
@@ -33,6 +34,13 @@ import {
 } from '#/api/shipment';
 import { useDescription } from '#/components/description';
 
+import {
+  resolveCartonPlanOrders,
+  resolveChangeSnapshot,
+  validateCartonContainerCapacity,
+  validateCartonPlan,
+} from '../../split/carton-plan';
+import { SHIPPING_MODE_FCL_HANGING } from '../../split/hanging';
 import {
   canActOnBookingOrders,
   canChangeBooking,
@@ -204,6 +212,59 @@ async function handlePublishChange() {
   AntModal.confirm({
     title: '确认发布该订舱变更？发布前将重新校验分柜完整性与柜容。',
     async onOk() {
+      const proposedSplitPlan = pendingChange.value?.proposedSplitPlanData;
+      if (proposedSplitPlan) {
+        const splitPlan = JSON.parse(proposedSplitPlan);
+        const containerConfigs = await getContainerConfigsByClientCode(
+          bookingDetail.value.clientCode,
+        );
+        const configs = Array.isArray(containerConfigs)
+          ? containerConfigs
+          : ((containerConfigs as any).data ?? []);
+        const effectiveBooking = resolveChangeSnapshot(
+          bookingDetail.value,
+          pendingChange.value?.proposedBookingData,
+        );
+        const containers = (splitPlan.containers ?? []).map(
+          (container: ShipmentApi.ShipmentContainer) => {
+            const config = configs.find(
+              (item: ShipmentApi.ContainerConfig) =>
+                item.containerType === container.containerType &&
+                (!effectiveBooking?.freightForwarder ||
+                  item.freightForwarder ===
+                    effectiveBooking.freightForwarder) &&
+                (!effectiveBooking?.productionCountry ||
+                  item.productionCountry ===
+                    effectiveBooking.productionCountry),
+            );
+            return {
+              ...container,
+              maxVolume: config?.maxVolume,
+              minVolume: config?.minVolume,
+            };
+          },
+        );
+        const cartonOrders = resolveCartonPlanOrders(
+          (bookingDetail.value?.orders ?? []).filter(
+            (order: ShipmentApi.ShipmentOrder) =>
+              order.shippingMode !== SHIPPING_MODE_FCL_HANGING,
+          ),
+          pendingChange.value?.orders,
+        );
+        const issues = [
+          ...validateCartonPlan(cartonOrders, containers),
+          ...validateCartonContainerCapacity(cartonOrders, containers),
+        ];
+        if (issues.length > 0) {
+          message.error(
+            `发布前分柜方案校验失败：${issues
+              .slice(0, 3)
+              .map((issue) => issue.message)
+              .join('；')}`,
+          );
+          throw new Error('carton split plan is incomplete');
+        }
+      }
       await publishBookingChange(pendingChange.value.id);
       message.success('发布成功');
       await handleChangeRefresh();
