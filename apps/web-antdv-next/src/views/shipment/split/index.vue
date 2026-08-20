@@ -144,9 +144,16 @@ const hangingOrderOptions = computed(() =>
       value: order.id,
     })),
 );
-const orderOptions = computed(() =>
-  isHangingMode.value ? hangingOrderOptions.value : cartonOrderOptions.value,
-);
+const orderOptions = computed(() => [
+  ...cartonOrderOptions.value.map((option) => ({
+    ...option,
+    label: `[纸箱] ${option.label}`,
+  })),
+  ...hangingOrderOptions.value.map((option) => ({
+    ...option,
+    label: `[挂装] ${option.label}`,
+  })),
+]);
 
 function configFor(containerType: string) {
   return containerConfigs.value.find(
@@ -204,8 +211,57 @@ const targetContainerOptions = computed(() => [
   ...containers.value.map((container) => ({
     label: `第 ${container.containerSeq ?? container.id} 柜（${container.containerType}）`,
     value: container.id,
+    disabled: isTargetContainerIncompatible(container),
   })),
 ]);
+const cartonPlanIssues = computed(() => {
+  const cartonOrders = effectiveOrders.value.filter(
+    (order) => order.shippingMode !== SHIPPING_MODE_FCL_HANGING,
+  );
+  return [
+    ...validateCartonPlan(cartonOrders, containers.value),
+    ...validateCartonContainerCapacity(cartonOrders, containers.value),
+  ];
+});
+
+function capacitySummary(container: ShipmentApi.ShipmentContainer) {
+  const hasHangingCargo = (container.cargos ?? []).some(
+    (cargo) =>
+      cargo.allocatedPackages !== undefined && cargo.allocatedPackages !== null,
+  );
+  if (hasHangingCargo) {
+    return `${container.totalHangingRods ?? '-'} 杆 / ${container.minHangingRods ?? '-'} ~ ${container.maxHangingRods ?? '-'} 杆`;
+  }
+  return `${container.totalVolume ?? '-'} CBM / ${container.minVolume ?? '-'} ~ ${container.maxVolume ?? '-'} CBM`;
+}
+
+function planIssueFor(container: ShipmentApi.ShipmentContainer) {
+  const containerIndex = containers.value.findIndex(
+    (item) => item.id === container.id,
+  );
+  return cartonPlanIssues.value.find(
+    (issue) => issue.containerIndex === containerIndex + 1,
+  );
+}
+
+function isTargetContainerIncompatible(
+  container: ShipmentApi.ShipmentContainer,
+) {
+  if (!selectedOrder.value) {
+    return false;
+  }
+  const hasCartonCargo = (container.cargos ?? []).some(
+    (cargo) => cargo.cartonNoFrom !== undefined && cargo.cartonNoFrom !== null,
+  );
+  const hasHangingCargo = (container.cargos ?? []).some(
+    (cargo) =>
+      cargo.allocatedPackages !== undefined && cargo.allocatedPackages !== null,
+  );
+  return (
+    (isHangingMode.value && hasCartonCargo) ||
+    (!isHangingMode.value && hasHangingCargo)
+  );
+}
 const containersForDisplay = computed(() => {
   const manifests = buildLoadingManifest(containers.value);
   return containers.value.map((container, index) => ({
@@ -562,6 +618,12 @@ const containerColumns: TableColumnsType<ShipmentApi.ShipmentContainer> = [
     width: 120,
   },
   {
+    title: '柜容 / 占用',
+    key: 'capacity',
+    width: 190,
+    render: (_value, record) => capacitySummary(record),
+  },
+  {
     title: '总箱数',
     dataIndex: 'totalCartons',
     key: 'totalCartons',
@@ -577,6 +639,19 @@ const containerColumns: TableColumnsType<ShipmentApi.ShipmentContainer> = [
       value === null || value === undefined
         ? '-'
         : `${(value * 100).toFixed(1)}%`,
+  },
+  {
+    title: '方案状态',
+    key: 'planStatus',
+    width: 180,
+    render: (_value, record) => {
+      const issue = planIssueFor(record);
+      return h(
+        Tag,
+        { color: issue ? 'error' : 'success' },
+        { default: () => issue?.message ?? '当前可执行' },
+      );
+    },
   },
   {
     title: '操作',
