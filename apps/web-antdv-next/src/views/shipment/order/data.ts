@@ -64,9 +64,27 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOrder>
     { field: 'warehouseDeliveryDate', title: '仓库交货日', width: 130 },
     { field: 'createTime', title: '创建时间', width: 180 },
     {
+      field: 'pendingWithdrawRequestId',
+      title: '撤回申请',
+      width: 100,
+      slots: {
+        default: ({ row }) => {
+          if (!row.pendingWithdrawRequestId) return '-';
+          return [
+            h(
+              Tag,
+              { color: 'warning' },
+              () =>
+                `待处理${row.pendingWithdrawRequestApplicantName ? `（${row.pendingWithdrawRequestApplicantName}）` : ''}`,
+            ),
+          ];
+        },
+      },
+    },
+    {
       field: 'actions',
       title: '操作',
-      width: 150,
+      width: 220,
       fixed: 'right',
       slots: { default: 'actions' },
     },

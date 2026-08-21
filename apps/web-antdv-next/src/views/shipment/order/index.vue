@@ -2,10 +2,11 @@
 import type { ActionItem, VxeTableGridOptions } from '#/adapter/vxe-table';
 import type { ShipmentApi } from '#/api/shipment';
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Page, useVbenModal } from '@vben/common-ui';
+import { useUserStore } from '@vben/stores';
 
 import { message } from 'antdv-next';
 
@@ -21,8 +22,12 @@ import {
 import { useGridColumns, useGridFormSchema } from './data';
 import OrderForm from './modules/form.vue';
 import OrderHandover from './modules/handover.vue';
+import OrderRemark from './modules/remark.vue';
+import OrderWithdraw from './modules/withdraw.vue';
 
 const router = useRouter();
+const userStore = useUserStore();
+const currentUserId = computed(() => userStore.userInfo?.userId);
 const selectedRows = ref<ShipmentApi.ShipmentOrder[]>([]);
 const [FormModal, formModalApi] = useVbenModal({
   connectedComponent: OrderForm,
@@ -30,6 +35,14 @@ const [FormModal, formModalApi] = useVbenModal({
 });
 const [HandoverModal, handoverModalApi] = useVbenModal({
   connectedComponent: OrderHandover,
+  destroyOnClose: true,
+});
+const [WithdrawModal, withdrawModalApi] = useVbenModal({
+  connectedComponent: OrderWithdraw,
+  destroyOnClose: true,
+});
+const [RemarkModal, remarkModalApi] = useVbenModal({
+  connectedComponent: OrderRemark,
   destroyOnClose: true,
 });
 
@@ -113,6 +126,22 @@ function handleHandover() {
   handoverModalApi.setData(selectedRows.value).open();
 }
 
+function handleWithdrawFinalConfirm(row: ShipmentApi.ShipmentOrder) {
+  withdrawModalApi.setData({ mode: 'direct', order: row }).open();
+}
+
+function handleRequestWithdrawFinalConfirm(row: ShipmentApi.ShipmentOrder) {
+  withdrawModalApi.setData({ mode: 'request', order: row }).open();
+}
+
+function handleProcessWithdrawRequest(row: ShipmentApi.ShipmentOrder) {
+  withdrawModalApi.setData({ mode: 'process', order: row }).open();
+}
+
+function handleEditRemark(row: ShipmentApi.ShipmentOrder) {
+  remarkModalApi.setData(row).open();
+}
+
 function handleGoBooking() {
   if (selectedRows.value.length === 0) {
     message.warning('请先选择待订舱订单');
@@ -164,6 +193,43 @@ function getOrderActions(row: ShipmentApi.ShipmentOrder): ActionItem[] {
       },
     });
   }
+  if (row.isFinalConfirmed) {
+    actions.push(
+      {
+        label: '修改备注',
+        type: 'link',
+        auth: ['container:order:update'],
+        onClick: handleEditRemark.bind(null, row),
+      },
+      {
+        label: '撤回最终确认',
+        type: 'link',
+        danger: true,
+        // 撤回权限是"订舱单证责任人 OR container:order:final-confirm:withdraw 权限码 OR 管理员"的并集，
+        // 单证责任人按订舱单动态绑定、前端无法据此过滤，因此这里只做粗粒度可见性控制，具体授权由后端裁决。
+        auth: ['container:order:update'],
+        onClick: handleWithdrawFinalConfirm.bind(null, row),
+      },
+    );
+    if (
+      !row.pendingWithdrawRequestId &&
+      currentUserId.value === row.responsibleUserId
+    ) {
+      actions.push({
+        label: '申请撤回确认',
+        type: 'link',
+        onClick: handleRequestWithdrawFinalConfirm.bind(null, row),
+      });
+    }
+  }
+  if (row.pendingWithdrawRequestId) {
+    actions.push({
+      label: '处理撤回申请',
+      type: 'link',
+      auth: ['container:order:update'],
+      onClick: handleProcessWithdrawRequest.bind(null, row),
+    });
+  }
   return actions;
 }
 
@@ -202,6 +268,8 @@ const [Grid, gridApi] = useVbenVxeGrid({
   <Page auto-content-height>
     <FormModal @success="handleRefresh" />
     <HandoverModal @success="handleRefresh" />
+    <WithdrawModal @success="handleRefresh" />
+    <RemarkModal @success="handleRefresh" />
     <Grid table-title="订舱大厅 — PO 生命周期">
       <template #toolbar-tools>
         <TableAction

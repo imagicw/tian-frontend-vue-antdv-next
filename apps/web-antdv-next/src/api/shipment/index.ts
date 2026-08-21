@@ -193,12 +193,34 @@ export namespace ShipmentApi {
     responsibleUserName?: string;
     /** 业务员（责任业务员昵称） */
     salesUserName?: string;
+    /** 待处理的最终数据确认撤回申请ID（无待处理申请时为空） */
+    pendingWithdrawRequestId?: number;
+    /** 待处理撤回申请的申请原因 */
+    pendingWithdrawRequestReason?: string;
+    /** 待处理撤回申请的申请人昵称 */
+    pendingWithdrawRequestApplicantName?: string;
   }
 
   export interface ShipmentOrderHandoverParams {
     orderIds: number[];
     reason: string;
     toUserId: number;
+  }
+
+  /** 直接撤回 PO 最终数据确认 / 提交撤回申请，均按订单ID + 原因请求。 */
+  export interface ShipmentOrderReasonParams {
+    orderId: number;
+    reason: string;
+  }
+
+  export interface ShipmentOrderFinalConfirmWithdrawRequestProcessParams {
+    reason?: string;
+    requestId: number;
+  }
+
+  export interface ShipmentOrderRemarkUpdateParams {
+    id: number;
+    remark?: string;
   }
 
   export interface ShipmentOrderPageParams {
@@ -675,6 +697,32 @@ export function handoverOrderResponsibility(
   data: ShipmentApi.ShipmentOrderHandoverParams,
 ) {
   return requestClient.put(`${BASE}/order/handover-responsibility`, data);
+}
+export function updateOrderRemark(
+  data: ShipmentApi.ShipmentOrderRemarkUpdateParams,
+) {
+  return requestClient.put(`${BASE}/order/remark`, data);
+}
+export function withdrawOrderFinalConfirm(
+  data: ShipmentApi.ShipmentOrderReasonParams,
+) {
+  return requestClient.put(`${BASE}/order/final-confirm/withdraw`, data);
+}
+export function submitOrderFinalConfirmWithdrawRequest(
+  data: ShipmentApi.ShipmentOrderReasonParams,
+) {
+  return requestClient.post(
+    `${BASE}/order/final-confirm/withdraw-request`,
+    data,
+  );
+}
+export function processOrderFinalConfirmWithdrawRequest(
+  data: ShipmentApi.ShipmentOrderFinalConfirmWithdrawRequestProcessParams,
+) {
+  return requestClient.put(
+    `${BASE}/order/final-confirm/withdraw-request/process`,
+    data,
+  );
 }
 
 // ---- Booking ----
