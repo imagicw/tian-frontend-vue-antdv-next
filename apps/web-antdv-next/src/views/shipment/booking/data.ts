@@ -51,6 +51,12 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentBookin
     { field: 'clientName', title: '客户名称', width: 140 },
     { field: 'freightForwarder', title: '货代', width: 140 },
     { field: 'productionCountry', title: '生产国家', width: 110 },
+    {
+      field: 'finalConfirmNotificationRulesConfigured',
+      title: '最终确认规则',
+      width: 130,
+      formatter: ({ cellValue }) => (cellValue ? '已快照' : '待补配置'),
+    },
     { field: 'applicant', title: '申请人', width: 100 },
     { field: 'booker', title: '订舱人', width: 100 },
     { field: 'vesselDate', title: '船期', width: 110 },

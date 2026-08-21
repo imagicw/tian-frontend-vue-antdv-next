@@ -13,6 +13,12 @@ export namespace ShipmentApi {
     allowedContainerTypes?: string;
     consolidationDeliveryDays?: number;
     cartonSplitTiming?: 1 | 2;
+    containerAllFinalConfirmNotifyEnabled?: boolean;
+    containerResponsibleFinalConfirmNotifyEnabled?: boolean;
+    containerDeliveryDateFinalConfirmNotifyEnabled?: boolean;
+    bulkAllFinalConfirmNotifyEnabled?: boolean;
+    bulkResponsibleFinalConfirmNotifyEnabled?: boolean;
+    bulkDeliveryDateFinalConfirmNotifyEnabled?: boolean;
     remark?: string;
     enabled: boolean;
   }
@@ -298,6 +304,10 @@ export namespace ShipmentApi {
     freightForwarder?: string;
     productionCountry?: string;
     cartonSplitTiming?: 1 | 2;
+    finalConfirmNotificationRulesConfigured?: boolean;
+    allFinalConfirmNotifyEnabled?: boolean;
+    responsibleFinalConfirmNotifyEnabled?: boolean;
+    deliveryDateFinalConfirmNotifyEnabled?: boolean;
     applicantId?: number;
     applicant?: string;
     bookerId?: number;

@@ -96,6 +96,84 @@ const [Form, formApi] = useVbenForm({
       defaultValue: false,
     },
     {
+      fieldName: 'containerAllFinalConfirmNotifyEnabled',
+      label: '拼柜整票完成通知',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '关闭', value: false },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: false,
+    },
+    {
+      fieldName: 'containerResponsibleFinalConfirmNotifyEnabled',
+      label: '拼柜同责任人通知',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '关闭', value: false },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: false,
+    },
+    {
+      fieldName: 'containerDeliveryDateFinalConfirmNotifyEnabled',
+      label: '拼柜同交期通知',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '关闭', value: false },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: false,
+    },
+    {
+      fieldName: 'bulkAllFinalConfirmNotifyEnabled',
+      label: '散货整票完成通知',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '关闭', value: false },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: false,
+    },
+    {
+      fieldName: 'bulkResponsibleFinalConfirmNotifyEnabled',
+      label: '散货同责任人通知',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '关闭', value: false },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: false,
+    },
+    {
+      fieldName: 'bulkDeliveryDateFinalConfirmNotifyEnabled',
+      label: '散货同交期通知',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '关闭', value: false },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: false,
+    },
+    {
       fieldName: 'remark',
       label: '备注',
       component: 'TextArea',

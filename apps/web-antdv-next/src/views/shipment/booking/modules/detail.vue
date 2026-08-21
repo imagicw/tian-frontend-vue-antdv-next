@@ -361,6 +361,11 @@ function useBookingDetailSchema(): DescriptionItemSchema[] {
     { field: 'clientName', label: '客户名称' },
     { field: 'freightForwarder', label: '货代' },
     { field: 'productionCountry', label: '生产国家' },
+    {
+      field: 'finalConfirmNotificationRulesConfigured',
+      label: '最终确认规则',
+      render: (value: boolean) => (value ? '已快照' : '待补配置'),
+    },
     { field: 'applicant', label: '申请人' },
     { field: 'booker', label: '订舱人' },
     { field: 'blNo', label: '提单号' },
