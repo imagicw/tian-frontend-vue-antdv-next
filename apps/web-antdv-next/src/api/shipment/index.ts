@@ -381,6 +381,17 @@ export namespace ShipmentApi {
     orderIds: number[];
   }
 
+  export interface ShipmentBookingHeaderUpdateParams {
+    id: number;
+    freightForwarder?: string;
+    blNo?: string;
+    ensDate?: string;
+    vesselDate?: string;
+    closingDate?: string;
+    ccUserIds?: string;
+    remarks?: string;
+  }
+
   // ---- Cost Allocation ----
   export interface ShipmentCostAllocationDetail {
     id: number;
@@ -742,6 +753,11 @@ export function updateBooking(
   data: ShipmentApi.ShipmentBookingSaveParams & { id: number },
 ) {
   return requestClient.put(`${BASE}/booking/update`, data);
+}
+export function updateBookingHeader(
+  data: ShipmentApi.ShipmentBookingHeaderUpdateParams,
+) {
+  return requestClient.put(`${BASE}/booking/header/update`, data);
 }
 export function deleteBooking(id: number) {
   return requestClient.delete(`${BASE}/booking/delete`, { params: { id } });

@@ -4,6 +4,7 @@ import {
   canActOnBookingOrders,
   canChangeBooking,
   canInitiateChange,
+  canMaintainBookingHeader,
   canModifyBooking,
   canPublishChange,
   canWithdrawChange,
@@ -24,6 +25,15 @@ describe('canModifyBooking', () => {
     expect(canModifyBooking(4)).toBe(false);
     expect(canModifyBooking(6)).toBe(false);
     expect(canModifyBooking(undefined)).toBe(false);
+  });
+});
+
+describe('canMaintainBookingHeader', () => {
+  it('only exposes document-header maintenance for a published booking', () => {
+    expect(canMaintainBookingHeader(2)).toBe(true);
+    expect(canMaintainBookingHeader(0)).toBe(false);
+    expect(canMaintainBookingHeader(4)).toBe(false);
+    expect(canMaintainBookingHeader(6)).toBe(false);
   });
 });
 

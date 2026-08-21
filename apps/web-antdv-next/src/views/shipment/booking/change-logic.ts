@@ -8,6 +8,13 @@ export function canModifyBooking(status: number | string | undefined): boolean {
   return MODIFIABLE_BOOKING_STATUSES.has(Number(status));
 }
 
+/** 已发布订舱的单证抬头维护不改动 PO、分柜或最终确认状态。 */
+export function canMaintainBookingHeader(
+  status: number | string | undefined,
+): boolean {
+  return Number(status) === 2;
+}
+
 /**
  * 判断当前用户是否为该 PO 的责任人。
  * 与后端 OrderResponsibilityUtil 的核心判定一致：优先取 responsibleUserId（数据交接后的最新归属），

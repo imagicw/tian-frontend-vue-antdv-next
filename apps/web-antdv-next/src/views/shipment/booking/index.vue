@@ -18,9 +18,11 @@ import {
   shipBooking,
 } from '#/api/shipment';
 
+import { canMaintainBookingHeader, canModifyBooking } from './change-logic';
 import { useGridColumns, useGridFormSchema } from './data';
 import BookingDetail from './modules/detail.vue';
 import BookingForm from './modules/form.vue';
+import BookingHeaderForm from './modules/header-form.vue';
 
 const router = useRouter();
 const selectedRows = ref<ShipmentApi.ShipmentBooking[]>([]);
@@ -31,6 +33,10 @@ const [FormModal, formModalApi] = useVbenModal({
 });
 const [DetailModal, detailModalApi] = useVbenModal({
   connectedComponent: BookingDetail,
+  destroyOnClose: true,
+});
+const [HeaderModal, headerModalApi] = useVbenModal({
+  connectedComponent: BookingHeaderForm,
   destroyOnClose: true,
 });
 
@@ -46,6 +52,9 @@ function handleEdit(row: ShipmentApi.ShipmentBooking) {
 }
 function handleDetail(row: ShipmentApi.ShipmentBooking) {
   detailModalApi.setData({ id: row.id }).open();
+}
+function handleMaintainHeader(row: ShipmentApi.ShipmentBooking) {
+  headerModalApi.setData(row).open();
 }
 function handleSplit(row: ShipmentApi.ShipmentBooking) {
   router.push(`/shipment/split?bookingId=${row.id}`);
@@ -170,12 +179,6 @@ function getBookingActions(row: ShipmentApi.ShipmentBooking): ActionItem[] {
       onClick: handleDetail.bind(null, row),
     },
     {
-      label: '编辑',
-      type: 'link',
-      auth: ['container:booking:update'],
-      onClick: handleEdit.bind(null, row),
-    },
-    {
       label: '分柜结果',
       type: 'link',
       auth: ['container:split:query'],
@@ -189,6 +192,22 @@ function getBookingActions(row: ShipmentApi.ShipmentBooking): ActionItem[] {
     },
   ];
   const status = String(row.status);
+  if (canModifyBooking(status)) {
+    actions.splice(1, 0, {
+      label: '编辑',
+      type: 'link',
+      auth: ['container:booking:update'],
+      onClick: handleEdit.bind(null, row),
+    });
+  }
+  if (canMaintainBookingHeader(status)) {
+    actions.push({
+      label: '维护单证资料',
+      type: 'link',
+      auth: ['container:booking:document-maintain'],
+      onClick: handleMaintainHeader.bind(null, row),
+    });
+  }
   if (canPublish(status)) {
     actions.push({
       label: '发布',
@@ -214,17 +233,19 @@ function getBookingActions(row: ShipmentApi.ShipmentBooking): ActionItem[] {
       onClick: handleCancel.bind(null, row),
     });
   }
-  actions.push({
-    label: '删除',
-    type: 'link',
-    danger: true,
-    icon: ACTION_ICON.DELETE,
-    auth: ['container:booking:delete'],
-    popConfirm: {
-      title: `确定删除订舱「${row.bookingNo ?? row.id}」吗？`,
-      confirm: handleDelete.bind(null, row),
-    },
-  });
+  if (canModifyBooking(status)) {
+    actions.push({
+      label: '删除',
+      type: 'link',
+      danger: true,
+      icon: ACTION_ICON.DELETE,
+      auth: ['container:booking:delete'],
+      popConfirm: {
+        title: `确定删除订舱「${row.bookingNo ?? row.id}」吗？`,
+        confirm: handleDelete.bind(null, row),
+      },
+    });
+  }
   return actions;
 }
 
@@ -265,6 +286,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
 <template>
   <Page auto-content-height>
     <FormModal @success="handleRefresh" />
+    <HeaderModal @success="handleRefresh" />
     <DetailModal />
     <Grid table-title="订舱管理">
       <template #toolbar-tools>
