@@ -96,6 +96,43 @@ export namespace ShipmentApi {
     containerType?: string;
   }
 
+  // ---- Document Handler Config ----
+  export interface DocumentHandlerConfig {
+    id: number;
+    clientCode: string;
+    destinationCountry?: string;
+    docUserId: number;
+    createTime?: string;
+  }
+
+  export interface DocumentHandlerConfigPageParams {
+    pageNo: number;
+    pageSize: number;
+    clientCode?: string;
+    destinationCountry?: string;
+    docUserId?: number;
+  }
+
+  export interface DocumentHandlerBackfillRecord {
+    id: number;
+    bookingId: number;
+    bookingNo?: string;
+    clientCode?: string;
+    destinationCountry?: string;
+    status: string;
+    resolvedDocUserId?: number;
+    message?: string;
+    createTime?: string;
+  }
+
+  export interface DocumentHandlerBackfillRecordPageParams {
+    pageNo: number;
+    pageSize: number;
+    bookingId?: number;
+    clientCode?: string;
+    status?: string;
+  }
+
   // ---- Packing List ----
   export interface ShipmentAttachment {
     id: number;
@@ -242,6 +279,33 @@ export namespace ShipmentApi {
     deliveryDateEnd?: string;
     isDraft?: boolean;
     status?: string;
+  }
+
+  // ---- Final-confirm notification outbox ----
+  export interface FinalConfirmNotificationOutbox {
+    id: number;
+    bookingId: number;
+    ruleCode: number;
+    groupKey: string;
+    completionCycle?: number;
+    cycleOpen?: boolean;
+    recipientSnapshot?: string;
+    orderSnapshot?: string;
+    status: number;
+    retryCount: number;
+    lastError?: string;
+    completedTime?: string;
+    sentTime?: string;
+  }
+
+  export interface FinalConfirmNotificationOutboxPageParams {
+    pageNo: number;
+    pageSize: number;
+    bookingId?: number;
+    ruleCode?: number;
+    status?: number;
+    completedTimeStart?: string;
+    completedTimeEnd?: string;
   }
 
   // ---- Booking ----
@@ -634,6 +698,43 @@ export function deleteContainerConfig(id: number) {
   });
 }
 
+// ---- Document Handler Config ----
+export function getDocumentHandlerConfigPage(
+  params: ShipmentApi.DocumentHandlerConfigPageParams,
+) {
+  return requestClient.get(`${BASE}/document-handler-config/page`, { params });
+}
+export function createDocumentHandlerConfig(
+  data: Partial<ShipmentApi.DocumentHandlerConfig>,
+) {
+  return requestClient.post(`${BASE}/document-handler-config/create`, data);
+}
+export function updateDocumentHandlerConfig(
+  data: Partial<ShipmentApi.DocumentHandlerConfig> & { id: number },
+) {
+  return requestClient.put(`${BASE}/document-handler-config/update`, data);
+}
+export function deleteDocumentHandlerConfig(id: number) {
+  return requestClient.delete(`${BASE}/document-handler-config/delete`, {
+    params: { id },
+  });
+}
+export function backfillPublishedBookingDocumentHandlers() {
+  return requestClient.post<ShipmentApi.DocumentHandlerBackfillRecord[]>(
+    `${BASE}/document-handler-config/backfill-published-bookings`,
+  );
+}
+export function getDocumentHandlerBackfillRecordPage(
+  params: ShipmentApi.DocumentHandlerBackfillRecordPageParams,
+) {
+  return requestClient.get(
+    `${BASE}/document-handler-config/backfill-record-page`,
+    {
+      params,
+    },
+  );
+}
+
 // ---- Packing List ----
 export function getPackingListPage(
   params: ShipmentApi.ShipmentPackingListPageParams,
@@ -743,6 +844,24 @@ export function processOrderFinalConfirmWithdrawRequest(
   return requestClient.put(
     `${BASE}/order/final-confirm/withdraw-request/process`,
     data,
+  );
+}
+
+// ---- Final-confirm notification outbox ----
+export function getFinalConfirmNotificationOutboxPage(
+  params: ShipmentApi.FinalConfirmNotificationOutboxPageParams,
+) {
+  return requestClient.get(`${BASE}/final-confirm-notification-outbox/page`, {
+    params,
+  });
+}
+export function resendFinalConfirmNotificationOutbox(id: number) {
+  return requestClient.put(
+    `${BASE}/final-confirm-notification-outbox/resend`,
+    undefined,
+    {
+      params: { id },
+    },
   );
 }
 
