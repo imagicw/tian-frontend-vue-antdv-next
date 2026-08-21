@@ -8,6 +8,7 @@ import {
   canPublishChange,
   canWithdrawChange,
   canWithdrawChangeOrder,
+  filterAddableOrders,
   isOrderOwner,
   resolveRemoveOrderStrategy,
 } from './change-logic';
@@ -128,6 +129,23 @@ describe('canActOnBookingOrders', () => {
     expect(canActOnBookingOrders(4)).toBe(false);
     expect(canActOnBookingOrders(6)).toBe(false);
     expect(canActOnBookingOrders(undefined)).toBe(false);
+  });
+});
+
+describe('filterAddableOrders', () => {
+  it('keeps only PO owned by the current user (PO 更换候选须与后端 validateChangeOrderEditor 一致)', () => {
+    const orders = [
+      { id: 1, creator: '1024' },
+      { id: 2, creator: '2048' },
+      { id: 3, responsibleUserId: 1024, creator: '2048' },
+    ];
+    expect(filterAddableOrders(1024, orders).map((o) => o.id)).toEqual([1, 3]);
+  });
+
+  it('returns an empty list when the current user id is missing', () => {
+    expect(
+      filterAddableOrders(undefined, [{ id: 1, creator: '1024' }]),
+    ).toEqual([]);
   });
 });
 

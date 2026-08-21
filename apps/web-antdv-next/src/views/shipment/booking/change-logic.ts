@@ -102,6 +102,18 @@ export function canPublishChange(
   return String(currentUserId) === String(booking.applicantId ?? '');
 }
 
+/**
+ * 从"未订舱"候选中筛选出本人可作为替代 PO 添加进待发布变更的条目。
+ * 与后端 validateChangeOrderEditor 一致：新增一行变更时校验的是"被添加订单"本身的责任人，
+ * 不是发起人是否有权发起变更——非责任人选择会在保存时被拒绝，因此候选列表本身就应只呈现本人负责的 PO。
+ * 管理员/授权代理豁免不在前端判断，交由后端兜底。
+ */
+export function filterAddableOrders<
+  T extends Pick<ShipmentApi.ShipmentOrder, 'creator' | 'responsibleUserId'>,
+>(currentUserId: number | string | undefined, orders: T[]): T[] {
+  return orders.filter((order) => isOrderOwner(currentUserId, order));
+}
+
 /** 撤回本人在变更草稿内对某条 PO 的改动：本人发起或被授权代办的责任人。 */
 export function canWithdrawChangeOrder(
   currentUserId: number | string | undefined,

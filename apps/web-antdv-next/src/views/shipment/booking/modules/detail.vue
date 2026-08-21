@@ -47,10 +47,12 @@ import {
   canInitiateChange,
   canPublishChange,
   canWithdrawChange,
+  canWithdrawChangeOrder,
   isOrderOwner,
   resolveRemoveOrderStrategy,
 } from '../change-logic';
 import { BOOKING_STATUS_MAP, BOOKING_TYPE_MAP } from '../data';
+import ChangeAddOrderForm from './change-add-order-form.vue';
 import ChangeHeaderForm from './change-header-form.vue';
 import ChangeOrderForm from './change-order-form.vue';
 
@@ -164,6 +166,10 @@ const [ChangeHeaderModal, changeHeaderModalApi] = useVbenModal({
   connectedComponent: ChangeHeaderForm,
   destroyOnClose: true,
 });
+const [ChangeAddOrderModal, changeAddOrderModalApi] = useVbenModal({
+  connectedComponent: ChangeAddOrderForm,
+  destroyOnClose: true,
+});
 
 // 改动原因已在子表单内必填，这里只确保草稿存在，不再套一层确认弹窗（避免“确认框内开新弹窗”嵌套）。
 async function handleEditOrder(order: any) {
@@ -173,6 +179,34 @@ async function handleEditOrder(order: any) {
   } catch {
     // 错误已由全局请求拦截器提示，ensureChangeId 已刷新详情
   }
+}
+
+async function handleAddOrder() {
+  try {
+    const changeId = await ensureChangeId('发起 PO 更换（详见添加表单内原因）');
+    changeAddOrderModalApi
+      .setData({ changeId, clientCode: bookingDetail.value?.clientCode })
+      .open();
+  } catch {
+    // 错误已由全局请求拦截器提示，ensureChangeId 已刷新详情
+  }
+}
+
+function handleWithdrawChangeOrder(
+  changeOrder: ShipmentApi.ShipmentBookingChangeOrder,
+) {
+  promptReason(
+    `撤回本行改动（订单 ${changeOrder.orderId}）？`,
+    async (reason) => {
+      await withdrawBookingChange({
+        changeId: pendingChange.value.id,
+        orderId: changeOrder.orderId,
+        reason,
+      });
+      message.success('已撤回该行改动');
+      await handleChangeRefresh();
+    },
+  );
 }
 
 async function handleEditHeader() {
@@ -390,6 +424,21 @@ const changeOrderColumns = [
       changeActionLabel[record.action] ?? record.action,
   },
   { title: '原因', dataIndex: 'reason', key: 'reason' },
+  {
+    title: '操作',
+    key: 'rowActions',
+    render: (_value: unknown, record: ShipmentApi.ShipmentBookingChangeOrder) =>
+      canWithdrawChangeOrder(currentUserId.value, record)
+        ? h(
+            'a',
+            {
+              style: { color: 'red' },
+              onClick: () => handleWithdrawChangeOrder(record),
+            },
+            '撤回本行',
+          )
+        : null,
+  },
 ];
 
 const [Modal, modalApi] = useVbenModal({
@@ -414,6 +463,7 @@ const [Modal, modalApi] = useVbenModal({
   <Modal title="订舱详情" :footer="false" class="w-[900px]">
     <ChangeOrderModal @success="handleChangeRefresh" />
     <ChangeHeaderModal @success="handleChangeRefresh" />
+    <ChangeAddOrderModal @success="handleChangeRefresh" />
     <Spin :spinning="loading">
       <Descriptions
         v-if="bookingDetail"
@@ -462,6 +512,13 @@ const [Modal, modalApi] = useVbenModal({
               @click="handleEditHeader"
             >
               编辑订舱头
+            </Button>
+            <Button
+              v-access:code="['container:booking:change']"
+              size="small"
+              @click="handleAddOrder"
+            >
+              添加替代 PO（更换）
             </Button>
             <Button
               v-access:code="['container:booking:change']"
