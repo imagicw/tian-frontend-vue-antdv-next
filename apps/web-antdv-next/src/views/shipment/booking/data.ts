@@ -7,6 +7,8 @@ import { h } from 'vue';
 
 import { Tag } from 'antdv-next';
 
+import { $t } from '#/locales';
+
 export const BOOKING_STATUS_MAP: Record<
   string,
   { color: string; text: string }
@@ -53,9 +55,12 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentBookin
     { field: 'productionCountry', title: '生产国家', width: 110 },
     {
       field: 'finalConfirmNotificationRulesConfigured',
-      title: '最终确认规则',
+      title: $t('ui.shipment.finalConfirmationRules'),
       width: 130,
-      formatter: ({ cellValue }) => (cellValue ? '已快照' : '待补配置'),
+      formatter: ({ cellValue }) =>
+        cellValue
+          ? $t('ui.shipment.rulesSnapshotted')
+          : $t('ui.shipment.rulesMissing'),
     },
     { field: 'applicant', title: '申请人', width: 100 },
     { field: 'booker', title: '订舱人', width: 100 },

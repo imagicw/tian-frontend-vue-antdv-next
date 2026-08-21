@@ -9,6 +9,7 @@ import { message } from 'antdv-next';
 
 import { useVbenForm } from '#/adapter/form';
 import { createClientProfile, updateClientProfile } from '#/api/shipment';
+import { $t } from '#/locales';
 
 const emit = defineEmits<{ success: [] }>();
 
@@ -19,8 +20,8 @@ function notificationRuleSchema(fieldName: string, label: string) {
     component: 'RadioGroup' as const,
     componentProps: {
       options: [
-        { label: '启用', value: true },
-        { label: '关闭', value: false },
+        { label: $t('ui.shipment.enabled'), value: true },
+        { label: $t('ui.shipment.disabled'), value: false },
       ],
       optionType: 'button' as const,
     },
@@ -113,27 +114,27 @@ const [Form, formApi] = useVbenForm({
     },
     notificationRuleSchema(
       'containerAllFinalConfirmNotifyEnabled',
-      '拼柜整票完成通知',
+      $t('ui.shipment.containerAllFinalConfirmation'),
     ),
     notificationRuleSchema(
       'containerResponsibleFinalConfirmNotifyEnabled',
-      '拼柜同责任人通知',
+      $t('ui.shipment.containerResponsibleFinalConfirmation'),
     ),
     notificationRuleSchema(
       'containerDeliveryDateFinalConfirmNotifyEnabled',
-      '拼柜同交期通知',
+      $t('ui.shipment.containerDeliveryDateFinalConfirmation'),
     ),
     notificationRuleSchema(
       'bulkAllFinalConfirmNotifyEnabled',
-      '散货整票完成通知',
+      $t('ui.shipment.bulkAllFinalConfirmation'),
     ),
     notificationRuleSchema(
       'bulkResponsibleFinalConfirmNotifyEnabled',
-      '散货同责任人通知',
+      $t('ui.shipment.bulkResponsibleFinalConfirmation'),
     ),
     notificationRuleSchema(
       'bulkDeliveryDateFinalConfirmNotifyEnabled',
-      '散货同交期通知',
+      $t('ui.shipment.bulkDeliveryDateFinalConfirmation'),
     ),
     {
       fieldName: 'remark',

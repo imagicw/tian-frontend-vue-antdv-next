@@ -33,6 +33,7 @@ import {
   withdrawBookingChange,
 } from '#/api/shipment';
 import { useDescription } from '#/components/description';
+import { $t } from '#/locales';
 
 import {
   resolveCartonPlanOrders,
@@ -363,8 +364,11 @@ function useBookingDetailSchema(): DescriptionItemSchema[] {
     { field: 'productionCountry', label: '生产国家' },
     {
       field: 'finalConfirmNotificationRulesConfigured',
-      label: '最终确认规则',
-      render: (value: boolean) => (value ? '已快照' : '待补配置'),
+      label: $t('ui.shipment.finalConfirmationRules'),
+      render: (value: boolean) =>
+        value
+          ? $t('ui.shipment.rulesSnapshotted')
+          : $t('ui.shipment.rulesMissing'),
     },
     { field: 'applicant', label: '申请人' },
     { field: 'booker', label: '订舱人' },

@@ -42,6 +42,19 @@
     "closing": "正在关闭 {0} ...",
     "closeSuccess": "{0} 关闭成功"
   },
+  "shipment": {
+    "finalConfirmationRules": "最终确认规则",
+    "rulesSnapshotted": "已快照",
+    "rulesMissing": "待补配置",
+    "enabled": "启用",
+    "disabled": "关闭",
+    "containerAllFinalConfirmation": "拼柜整票完成通知",
+    "containerResponsibleFinalConfirmation": "拼柜同责任人通知",
+    "containerDeliveryDateFinalConfirmation": "拼柜同交期通知",
+    "bulkAllFinalConfirmation": "散货整票完成通知",
+    "bulkResponsibleFinalConfirmation": "散货同责任人通知",
+    "bulkDeliveryDateFinalConfirmation": "散货同交期通知"
+  },
   "placeholder": {
     "input": "请输入",
     "select": "请选择",
