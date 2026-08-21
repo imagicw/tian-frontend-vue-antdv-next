@@ -12,6 +12,22 @@ import { createClientProfile, updateClientProfile } from '#/api/shipment';
 
 const emit = defineEmits<{ success: [] }>();
 
+function notificationRuleSchema(fieldName: string, label: string) {
+  return {
+    fieldName,
+    label,
+    component: 'RadioGroup' as const,
+    componentProps: {
+      options: [
+        { label: '启用', value: true },
+        { label: '关闭', value: false },
+      ],
+      optionType: 'button' as const,
+    },
+    defaultValue: false,
+  };
+}
+
 const [Form, formApi] = useVbenForm({
   commonConfig: {
     componentProps: { class: 'w-full' },
@@ -95,84 +111,30 @@ const [Form, formApi] = useVbenForm({
       },
       defaultValue: false,
     },
-    {
-      fieldName: 'containerAllFinalConfirmNotifyEnabled',
-      label: '拼柜整票完成通知',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '启用', value: true },
-          { label: '关闭', value: false },
-        ],
-        optionType: 'button',
-      },
-      defaultValue: false,
-    },
-    {
-      fieldName: 'containerResponsibleFinalConfirmNotifyEnabled',
-      label: '拼柜同责任人通知',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '启用', value: true },
-          { label: '关闭', value: false },
-        ],
-        optionType: 'button',
-      },
-      defaultValue: false,
-    },
-    {
-      fieldName: 'containerDeliveryDateFinalConfirmNotifyEnabled',
-      label: '拼柜同交期通知',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '启用', value: true },
-          { label: '关闭', value: false },
-        ],
-        optionType: 'button',
-      },
-      defaultValue: false,
-    },
-    {
-      fieldName: 'bulkAllFinalConfirmNotifyEnabled',
-      label: '散货整票完成通知',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '启用', value: true },
-          { label: '关闭', value: false },
-        ],
-        optionType: 'button',
-      },
-      defaultValue: false,
-    },
-    {
-      fieldName: 'bulkResponsibleFinalConfirmNotifyEnabled',
-      label: '散货同责任人通知',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '启用', value: true },
-          { label: '关闭', value: false },
-        ],
-        optionType: 'button',
-      },
-      defaultValue: false,
-    },
-    {
-      fieldName: 'bulkDeliveryDateFinalConfirmNotifyEnabled',
-      label: '散货同交期通知',
-      component: 'RadioGroup',
-      componentProps: {
-        options: [
-          { label: '启用', value: true },
-          { label: '关闭', value: false },
-        ],
-        optionType: 'button',
-      },
-      defaultValue: false,
-    },
+    notificationRuleSchema(
+      'containerAllFinalConfirmNotifyEnabled',
+      '拼柜整票完成通知',
+    ),
+    notificationRuleSchema(
+      'containerResponsibleFinalConfirmNotifyEnabled',
+      '拼柜同责任人通知',
+    ),
+    notificationRuleSchema(
+      'containerDeliveryDateFinalConfirmNotifyEnabled',
+      '拼柜同交期通知',
+    ),
+    notificationRuleSchema(
+      'bulkAllFinalConfirmNotifyEnabled',
+      '散货整票完成通知',
+    ),
+    notificationRuleSchema(
+      'bulkResponsibleFinalConfirmNotifyEnabled',
+      '散货同责任人通知',
+    ),
+    notificationRuleSchema(
+      'bulkDeliveryDateFinalConfirmNotifyEnabled',
+      '散货同交期通知',
+    ),
     {
       fieldName: 'remark',
       label: '备注',
