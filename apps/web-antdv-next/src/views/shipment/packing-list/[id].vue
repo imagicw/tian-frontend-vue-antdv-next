@@ -88,7 +88,7 @@ async function loadData() {
   try {
     const [pl, orders] = await Promise.all([
       getPackingList(packingListId),
-      getOrderPage({ pageNo: 1, pageSize: 500, packingListId }),
+      getOrderPage({ pageNo: 1, pageSize: 100, packingListId }),
     ]);
     packingList.value = pl;
     linkedOrders.value = (orders as any).list ?? [];
