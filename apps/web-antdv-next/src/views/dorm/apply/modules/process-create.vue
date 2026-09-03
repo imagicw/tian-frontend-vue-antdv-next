@@ -213,7 +213,7 @@ async function refreshApprovalPrediction() {
   const data = await getApprovalDetailApi({
     activityId: BpmNodeIdEnum.START_USER_NODE_ID,
     processDefinitionId: processDefinition.value.id,
-    processVariables: JSON.stringify({ buildId: formData.buildId }),
+    processVariablesStr: JSON.stringify({ buildId: formData.buildId }),
   });
   activityNodes.value = data?.activityNodes ?? [];
   const selectableNodeIds = activityNodes.value
