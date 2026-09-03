@@ -62,7 +62,8 @@ async function loadUserOptions() {
       componentProps: {
         allowClear: false,
         options: users.map((user) => ({
-          label: `${user.nickname} (${user.username})`,
+          // simple-list only returns nickname, department and email; it has no username.
+          label: user.nickname,
           value: user.id,
         })),
         showSearch: true,
