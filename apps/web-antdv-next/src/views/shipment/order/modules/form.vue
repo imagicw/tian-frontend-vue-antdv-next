@@ -22,6 +22,14 @@ const [Form, formApi] = useVbenForm({
       dependencies: { triggerFields: [''], show: () => false },
     },
     {
+      fieldName: 'odId',
+      label: '订单标识',
+      component: 'Input',
+      componentProps: { placeholder: '请输入订单标识' },
+      rules: 'required',
+      formItemClass: 'col-span-2',
+    },
+    {
       fieldName: 'poNo',
       label: 'PO号',
       component: 'Input',
@@ -93,6 +101,20 @@ const [Form, formApi] = useVbenForm({
       label: '总体积(CBM)',
       component: 'InputNumber',
       componentProps: { min: 0, precision: 4, class: 'w-full' },
+      formItemClass: 'col-span-2',
+    },
+    {
+      fieldName: 'cartonNoFrom',
+      label: '起始箱号',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0, class: 'w-full' },
+      formItemClass: 'col-span-2',
+    },
+    {
+      fieldName: 'cartonNoTo',
+      label: '结束箱号',
+      component: 'InputNumber',
+      componentProps: { min: 1, precision: 0, class: 'w-full' },
       formItemClass: 'col-span-2',
     },
     {
