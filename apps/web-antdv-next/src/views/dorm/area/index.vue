@@ -377,8 +377,8 @@ onMounted(getList);
 
 .area-cover {
   position: relative;
-  height: 148px;
   flex: none;
+  height: 148px;
   overflow: hidden;
   background: hsl(var(--muted));
 }
@@ -401,15 +401,15 @@ onMounted(getList);
 
 .area-cover__placeholder {
   display: flex;
-  height: 100%;
+  gap: 10px;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  height: 100%;
   padding: 20px;
-  color: hsl(var(--primary));
   font-size: 18px;
   font-weight: 700;
   line-height: 1.5;
+  color: hsl(var(--primary));
   text-align: center;
   overflow-wrap: anywhere;
   background:
@@ -430,22 +430,22 @@ onMounted(getList);
   right: 10px;
   bottom: 10px;
   display: flex;
-  align-items: center;
   gap: 5px;
+  align-items: center;
   padding: 4px 8px;
-  color: white;
   font-size: 11px;
+  color: white;
+  pointer-events: none;
   background: rgb(15 23 42 / 68%);
   border: 1px solid rgb(255 255 255 / 18%);
   border-radius: 999px;
   backdrop-filter: blur(6px);
-  pointer-events: none;
 }
 
 @media (max-width: 768px) {
   .area-filter-row {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .area-filter :deep(.ant-form-item) {

@@ -10,7 +10,7 @@ import { Tag } from 'antdv-next';
 
 export const ALLOCATION_STATUS_MAP: Record<
   number,
-  { color: string; text: string; }
+  { color: string; text: string }
 > = {
   0: { text: '有效', color: 'success' },
   1: { text: '已撤销', color: 'default' },

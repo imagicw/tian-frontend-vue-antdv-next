@@ -140,7 +140,7 @@ const [Modal, modalApi] = useVbenModal({
       return;
     }
     const row =
-      modalApi.getData<HrmInsuranceMonthEmployeeRecordApi.InsuranceMonthEmployeeRecord>();
+      modalApi.getData() as HrmInsuranceMonthEmployeeRecordApi.InsuranceMonthEmployeeRecord;
     if (!row?.id) {
       return;
     }
@@ -152,7 +152,7 @@ const [Modal, modalApi] = useVbenModal({
         ...(detail.socialSecurityProjectList || []),
         ...(detail.providentFundProjectList || []),
       ].map((project) => ({ ...project }));
-      await formApi.resetForm();
+      await formApi.reset();
       await formApi.setValues({
         employeeDisplay: `${detail.employeeName || ''}${detail.jobNumber ? ` / ${detail.jobNumber}` : ''}`,
         schemeId: detail.schemeId,
@@ -177,16 +177,16 @@ defineExpose({
 <template>
   <Modal class="w-[960px]">
     <Form class="mx-4">
-      <template #schemeId="{ model, field }">
+      <template #schemeId="{ componentProps }">
         <InsuranceSchemeSelect
-          v-model:model-value="model[field]"
+          v-bind="componentProps"
           @change="handleSchemeChange"
         />
       </template>
-      <template #status="{ model, field }">
+      <template #status="{ modelValue }">
         <DictTag
           :type="DICT_TYPE.HRM_INSURANCE_EMP_STATUS"
-          :value="model[field] ?? ''"
+          :value="modelValue ?? ''"
         />
       </template>
     </Form>

@@ -69,7 +69,9 @@ const [Modal, modalApi] = useVbenModal({
       return;
     }
     // 加载数据
-    const data = modalApi.getData();
+    const data = modalApi.getData() as
+      | undefined
+      | { selectedList?: SystemDeptApi.Dept[] };
     if (!data) {
       return;
     }
@@ -83,7 +85,7 @@ const [Modal, modalApi] = useVbenModal({
       if (data.selectedList?.length) {
         const selectedIds = data.selectedList
           .map((dept: SystemDeptApi.Dept) => dept.id)
-          .filter((id: number) => id !== undefined);
+          .filter((id): id is number => id !== undefined);
         selectedDeptIds.value = props.checkStrictly
           ? {
               checked: selectedIds,

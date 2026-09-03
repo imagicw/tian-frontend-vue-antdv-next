@@ -129,7 +129,7 @@ function setupAccessGuard(router: Router) {
           )
         : [];
       return (
-        !requiredCodes.length ||
+        requiredCodes.length === 0 ||
         requiredCodes.some((code) => accessCodes.has(code))
       );
     });

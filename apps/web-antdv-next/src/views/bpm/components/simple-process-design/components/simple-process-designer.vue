@@ -9,7 +9,7 @@ import type { SystemPostApi } from '#/api/system/post';
 import type { SystemRoleApi } from '#/api/system/role';
 import type { SystemUserApi } from '#/api/system/user';
 
-import { inject, onMounted, provide, ref, watch } from 'vue';
+import { computed, inject, onMounted, provide, ref, watch } from 'vue';
 
 import { useVbenModal } from '@vben/common-ui';
 import { BpmModelFormType, BpmNodeTypeEnum } from '@vben/constants';
@@ -118,6 +118,9 @@ provide('processNodeTree', processNodeTree);
 const [ErrorModal, errorModalApi] = useVbenModal({
   fullscreenButton: false,
 });
+const errorModalNodes = computed(
+  () => (errorModalApi.getData() as SimpleFlowNode[] | undefined) ?? [],
+);
 
 // 添加更新模型的方法
 function updateModel() {
@@ -240,7 +243,7 @@ defineExpose({ validate });
       <div class="mb-2 text-base">以下节点配置不完善，请修改相关配置</div>
       <div
         class="mb-3 rounded-md p-2 text-sm"
-        v-for="(item, index) in errorModalApi.getData()"
+        v-for="(item, index) in errorModalNodes"
         :key="index"
       >
         {{ item.name }} : {{ NODE_DEFAULT_TEXT.get(item.type) }}

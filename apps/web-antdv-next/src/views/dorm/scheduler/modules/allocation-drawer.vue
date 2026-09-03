@@ -1,4 +1,6 @@
 <script lang="ts" setup>
+import type { SingleDatePickerValue } from '../../utils/date-picker';
+
 import type { DormApi } from '#/api/dorm';
 
 import { computed, ref, watch } from 'vue';
@@ -22,10 +24,7 @@ import dayjs from 'dayjs';
 
 import { allocateDormBed, getRoomAllocationWorkbench } from '#/api/dorm';
 
-import {
-  getSingleDatePickerValue,
-  type SingleDatePickerValue,
-} from '../../utils/date-picker';
+import { getSingleDatePickerValue } from '../../utils/date-picker';
 
 const props = defineProps<{
   buildId?: number;
@@ -362,9 +361,8 @@ defineExpose({ openAllocation });
             </template>
           </Input>
           <Tag>
-{{ visiblePendingGuests.length }} /
-            {{ pendingGuests.length }} 人
-</Tag>
+            {{ visiblePendingGuests.length }} / {{ pendingGuests.length }} 人
+          </Tag>
         </div>
 
         <Empty
@@ -390,13 +388,11 @@ defineExpose({ openAllocation });
                 <strong class="text-foreground">{{ guest.userName }}</strong>
                 <Tag color="processing">待分配</Tag>
                 <Tag v-if="guest.requestGroupNo">
-组 {{ guest.requestGroupNo }}
-</Tag>
+                  组 {{ guest.requestGroupNo }}
+                </Tag>
                 <Tag color="purple">
-{{
-                  roomTypeLabel(guest.requestedRoomType)
-                }}
-</Tag>
+                  {{ roomTypeLabel(guest.requestedRoomType) }}
+                </Tag>
               </div>
               <div class="text-muted-foreground mt-1 truncate text-xs">
                 {{ guest.orderSerial }}
@@ -407,9 +403,13 @@ defineExpose({ openAllocation });
                 <IconifyIcon icon="lucide:grip-vertical" />
                 拖到日历
               </span>
-              <Button type="primary" size="small" @click="openAllocation(guest)">
-分配床位
-</Button>
+              <Button
+                type="primary"
+                size="small"
+                @click="openAllocation(guest)"
+              >
+                分配床位
+              </Button>
             </div>
           </div>
 
@@ -503,8 +503,8 @@ defineExpose({ openAllocation });
           <div class="mb-1 flex items-center gap-2 text-sm font-medium">
             调整原因
             <Tag v-if="periodChanged" color="orange">
-日期偏离审批结果，必填
-</Tag>
+              日期偏离审批结果，必填
+            </Tag>
             <span v-else class="text-muted-foreground text-xs">选填</span>
           </div>
           <TextArea
@@ -522,8 +522,8 @@ defineExpose({ openAllocation });
 
 <style scoped>
 .pending-guest-card {
-  border-color: hsl(var(--border));
   cursor: grab;
+  border-color: hsl(var(--border));
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
@@ -531,8 +531,8 @@ defineExpose({ openAllocation });
 
 .allocation-target {
   display: flex;
-  align-items: flex-start;
   gap: 11px;
+  align-items: flex-start;
   padding: 12px 14px;
   background: hsl(var(--primary) / 6%);
   border: 1px solid hsl(var(--primary) / 18%);
@@ -541,11 +541,11 @@ defineExpose({ openAllocation });
 
 .allocation-target__icon {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
   flex: none;
   align-items: center;
   justify-content: center;
+  width: 34px;
+  height: 34px;
   color: hsl(var(--primary));
   background: hsl(var(--primary) / 10%);
   border-radius: 9px;
@@ -553,19 +553,19 @@ defineExpose({ openAllocation });
 
 .allocation-target__title {
   display: block;
-  overflow: hidden;
   margin-top: 2px;
-  color: hsl(var(--foreground));
-  font-size: 14px;
+  overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 14px;
+  color: hsl(var(--foreground));
   white-space: nowrap;
 }
 
 .pending-guest-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
   gap: 10px;
+  align-items: center;
   padding-bottom: 2px;
 }
 
@@ -581,26 +581,26 @@ defineExpose({ openAllocation });
 .pending-guest-card__meta {
   display: grid;
   gap: 7px;
-  margin-top: 12px;
   padding-top: 11px;
-  color: hsl(var(--muted-foreground));
+  margin-top: 12px;
   font-size: 12px;
+  color: hsl(var(--muted-foreground));
   border-top: 1px solid hsl(var(--border));
 }
 
 .pending-guest-card__meta > div {
   display: flex;
-  min-width: 0;
-  align-items: center;
   gap: 7px;
+  align-items: center;
+  min-width: 0;
 }
 
 .pending-guest-card__drag {
   display: inline-flex;
-  align-items: center;
   gap: 3px;
-  color: hsl(var(--muted-foreground));
+  align-items: center;
   font-size: 11px;
+  color: hsl(var(--muted-foreground));
   white-space: nowrap;
 }
 </style>

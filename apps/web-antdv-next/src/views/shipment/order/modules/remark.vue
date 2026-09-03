@@ -44,7 +44,7 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    order.value = modalApi.getData<ShipmentApi.ShipmentOrder>();
+    order.value = modalApi.getData() as ShipmentApi.ShipmentOrder | undefined;
     await formApi.resetForm();
     await formApi.setValues({ remark: order.value?.remark });
   },

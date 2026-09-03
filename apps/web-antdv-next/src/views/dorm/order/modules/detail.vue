@@ -2,6 +2,8 @@
 import type { TableColumnsType } from 'antdv-next';
 import type { Dayjs } from 'dayjs';
 
+import type { SingleDatePickerValue } from '../../utils/date-picker';
+
 import type { DormApi } from '#/api/dorm';
 import type { SystemUserApi } from '#/api/system/user';
 
@@ -49,10 +51,7 @@ import { getSimpleUserList } from '#/api/system/user';
 import { useDescription } from '#/components/description';
 
 import { getDormTimezoneLabel } from '../../area/timezones';
-import {
-  getSingleDatePickerValue,
-  type SingleDatePickerValue,
-} from '../../utils/date-picker';
+import { getSingleDatePickerValue } from '../../utils/date-picker';
 import {
   ORDER_STATUS_MAP,
   SUB_ORDER_STATUS_MAP,
@@ -190,7 +189,10 @@ const stayEndTime = computed(
     orderInfo.value?.serveEndTime ?? orderSnapshot.value?.serveEndTime ?? '',
 );
 const stayDays = computed(() => {
-  if (orderSnapshot.value?.serveDays != null) {
+  if (
+    orderSnapshot.value?.serveDays !== null &&
+    orderSnapshot.value?.serveDays !== undefined
+  ) {
     return orderSnapshot.value.serveDays;
   }
   let maxDays = 0;
@@ -231,7 +233,11 @@ const buildingTitle = computed(() => {
 });
 const orderImage = computed(() => orderSnapshot.value?.images?.[0]);
 const feeDisplay = computed(() => {
-  if (orderInfo.value?.orderFee == null) return '待结算';
+  if (
+    orderInfo.value?.orderFee === null ||
+    orderInfo.value?.orderFee === undefined
+  )
+    return '待结算';
   return `${orderInfo.value.orderFee} ${orderInfo.value.settleCurrencyCode ?? ''}`.trim();
 });
 const receiptGroups = computed(
@@ -304,7 +310,13 @@ function getRoomType(room?: DormApi.DormRoom) {
 
 function getEstimatedFee(row: DormApi.DormSubOrder) {
   const unitPrice = row.roomSnapshot?.settleAmount;
-  if (unitPrice == null || row.days == null) return '-';
+  if (
+    unitPrice === null ||
+    unitPrice === undefined ||
+    row.days === null ||
+    row.days === undefined
+  )
+    return '-';
   return `${row.roomSnapshot?.settleCurrencyCode ?? ''} ${(
     unitPrice * row.days
   ).toFixed(2)}`.trim();
@@ -315,7 +327,7 @@ function getFeeTotal(fee: DormApi.FeeItem) {
 }
 
 function formatMoney(amount?: number, currency?: string) {
-  if (amount == null) return '-';
+  if (amount === null || amount === undefined) return '-';
   return `${amount.toFixed(2)} ${currency ?? ''}`.trim();
 }
 
@@ -359,7 +371,12 @@ function prepareSettlementData() {
         message.warning(`${subOrder.userName || '入住人'}的费用名称不能重复`);
         return false;
       }
-      if (fee.unitPrice == null || fee.quantity == null) {
+      if (
+        fee.unitPrice === null ||
+        fee.unitPrice === undefined ||
+        fee.quantity === null ||
+        fee.quantity === undefined
+      ) {
         message.warning(`${itemName}的单价和数量不能为空`);
         return false;
       }
@@ -1505,16 +1522,16 @@ onMounted(() => {
 }
 
 .section-title strong {
-  color: hsl(var(--foreground));
   font-size: 15px;
   line-height: 1.35;
+  color: hsl(var(--foreground));
 }
 
 .section-title small {
   margin-top: 2px;
-  color: hsl(var(--muted-foreground));
   font-size: 11px;
   font-weight: 400;
+  color: hsl(var(--muted-foreground));
 }
 
 .order-descriptions :deep(.ant-descriptions-view) {
@@ -1585,8 +1602,8 @@ onMounted(() => {
 }
 
 .receipt-paper__heading strong {
-  color: #389e0d;
   font-size: 20px;
+  color: #389e0d;
 }
 
 .receipt-group {
@@ -1616,10 +1633,10 @@ onMounted(() => {
 
 .receipt-table__head {
   padding: 7px 10px;
+  font-size: 11px;
   color: hsl(var(--muted-foreground));
   background: hsl(var(--muted) / 38%);
   border-radius: 6px;
-  font-size: 11px;
 }
 
 .receipt-table__head > :not(:first-child) {
@@ -1628,8 +1645,8 @@ onMounted(() => {
 
 .receipt-line {
   padding: 10px;
-  border-bottom: 1px solid hsl(var(--border) / 60%);
   font-size: 13px;
+  border-bottom: 1px solid hsl(var(--border) / 60%);
 }
 
 .receipt-line:last-child {
@@ -1648,9 +1665,9 @@ onMounted(() => {
 .receipt-line > div:first-child span {
   margin-top: 2px;
   overflow: hidden;
-  color: hsl(var(--muted-foreground));
-  font-size: 11px;
   text-overflow: ellipsis;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
   white-space: nowrap;
 }
 
@@ -1674,13 +1691,13 @@ onMounted(() => {
 
 .receipt-paper__total span {
   margin-right: 16px;
-  color: hsl(var(--muted-foreground));
   font-size: 12px;
+  color: hsl(var(--muted-foreground));
 }
 
 .receipt-paper__total strong {
-  color: hsl(var(--foreground));
   font-size: 18px;
+  color: hsl(var(--foreground));
 }
 
 .stay-card :deep(.ant-table-container) {
@@ -1714,25 +1731,25 @@ onMounted(() => {
 }
 
 .guest-cell__content > strong {
-  color: hsl(var(--foreground));
   font-size: 13px;
+  color: hsl(var(--foreground));
 }
 
 .guest-cell__serial {
   width: fit-content;
   margin-top: 2px;
-  color: hsl(var(--muted-foreground));
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
+  color: hsl(var(--muted-foreground));
 }
 
 .guest-cell__remark {
   max-width: 210px;
   margin-top: 2px;
   overflow: hidden;
-  color: hsl(var(--muted-foreground));
-  font-size: 11px;
   text-overflow: ellipsis;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
   white-space: nowrap;
 }
 
@@ -1740,8 +1757,8 @@ onMounted(() => {
   display: flex;
   gap: 4px;
   align-items: center;
-  color: hsl(var(--foreground));
   font-size: 12px;
+  color: hsl(var(--foreground));
   white-space: nowrap;
 }
 
@@ -1833,8 +1850,8 @@ onMounted(() => {
 .settle-field label {
   display: block;
   margin-bottom: 5px;
-  color: hsl(var(--muted-foreground));
   font-size: 11px;
+  color: hsl(var(--muted-foreground));
 }
 
 .settle-field--amount strong {
@@ -1880,8 +1897,8 @@ onMounted(() => {
   }
 
   .order-hero__actions {
-    width: 100%;
     justify-content: flex-start;
+    width: 100%;
   }
 
   .order-hero__progress {

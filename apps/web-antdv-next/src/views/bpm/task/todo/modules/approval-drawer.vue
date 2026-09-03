@@ -31,11 +31,13 @@ const [Drawer, drawerApi] = useVbenDrawer({
   destroyOnClose: true,
   onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = drawerApi.getData<{
-      processInstanceId: string;
-      taskId: string;
-      userOptions: SystemUserApi.User[];
-    }>();
+    const data = drawerApi.getData() as
+      | undefined
+      | {
+          processInstanceId: string;
+          taskId: string;
+          userOptions: SystemUserApi.User[];
+        };
     processInstanceId.value = data?.processInstanceId;
     taskId.value = data?.taskId;
     userOptions.value = data?.userOptions ?? [];

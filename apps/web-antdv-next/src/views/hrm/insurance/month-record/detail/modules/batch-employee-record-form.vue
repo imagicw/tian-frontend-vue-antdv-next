@@ -133,12 +133,12 @@ const [Modal, modalApi] = useVbenModal({
     if (!isOpen) {
       return;
     }
-    const ids = modalApi.getData<number[]>() || [];
+    const ids = (modalApi.getData() as number[]) || [];
     recordIds.value = ids;
     schemeId.value = undefined;
     schemeType.value = undefined;
     projectList.value = [];
-    await formApi.resetForm();
+    await formApi.reset();
     await formApi.setValues({
       employeeCount: `${ids.length} 人`,
       schemeId: undefined,
@@ -160,9 +160,9 @@ defineExpose({
 <template>
   <Modal class="w-[960px]">
     <Form class="mx-4">
-      <template #schemeId="{ model, field }">
+      <template #schemeId="{ componentProps }">
         <InsuranceSchemeSelect
-          v-model:model-value="model[field]"
+          v-bind="componentProps"
           @change="handleSchemeChange"
         />
       </template>

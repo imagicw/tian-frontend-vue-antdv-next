@@ -163,7 +163,9 @@ const [Modal, modalApi] = useVbenModal({
       previewDetails.value = [];
       return;
     }
-    const data = modalApi.getData<ShipmentApi.ShipmentCostAllocation>();
+    const data = modalApi.getData() as
+      | ShipmentApi.ShipmentCostAllocation
+      | undefined;
     await formApi.resetForm();
     if (data) {
       const shippingNosText = (data.shippingNos ?? []).join('\n');

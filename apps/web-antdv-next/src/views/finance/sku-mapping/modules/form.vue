@@ -49,7 +49,7 @@ const [Modal, modalApi] = useVbenModal({
       formData.value = undefined;
       return;
     }
-    const data = modalApi.getData<FinanceEcApi.ECSkuMapping>();
+    const data = modalApi.getData() as FinanceEcApi.ECSkuMapping | undefined;
     if (!data) return;
     formData.value = data;
     await formApi.setValues(data);

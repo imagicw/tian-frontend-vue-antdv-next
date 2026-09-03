@@ -436,7 +436,10 @@ const changeOrderColumns = [
   {
     title: '操作',
     key: 'rowActions',
-    render: (_value: unknown, record: ShipmentApi.ShipmentBookingChangeOrder) =>
+    render: (
+      _value: unknown,
+      record: ShipmentApi.ShipmentBookingChangeOrder,
+    ) =>
       canWithdrawChangeOrder(currentUserId.value, record)
         ? h(
             'a',
@@ -456,7 +459,7 @@ const [Modal, modalApi] = useVbenModal({
       bookingDetail.value = null;
       return;
     }
-    const data = modalApi.getData<{ id: number }>();
+    const data = modalApi.getData() as undefined | { id: number };
     if (!data?.id) return;
     loading.value = true;
     try {

@@ -963,9 +963,9 @@ onMounted(loadAreas);
 <style scoped>
 .building-header-content {
   display: flex;
+  gap: 24px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
 }
 
 .hero-back {
@@ -978,13 +978,13 @@ onMounted(loadAreas);
 
 .area-attention {
   display: flex;
-  align-items: flex-start;
   gap: 9px;
-  margin-top: 14px;
+  align-items: flex-start;
   padding: 10px 12px;
-  color: hsl(var(--muted-foreground));
+  margin-top: 14px;
   font-size: 12px;
   line-height: 1.6;
+  color: hsl(var(--muted-foreground));
   background: hsl(var(--muted) / 48%);
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
@@ -998,8 +998,8 @@ onMounted(loadAreas);
 
 .area-attention__title {
   margin-bottom: 2px;
-  color: hsl(var(--foreground));
   font-weight: 600;
+  color: hsl(var(--foreground));
 }
 
 .area-attention__content :deep(p) {
@@ -1016,10 +1016,10 @@ onMounted(loadAreas);
 
 .building-workspace {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  min-height: 0;
   flex: 1;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
+  min-height: 0;
 }
 
 .building-sidebar {
@@ -1037,15 +1037,15 @@ onMounted(loadAreas);
 
 .building-nav-item {
   display: flex;
-  width: 100%;
-  align-items: flex-start;
   gap: 10px;
+  align-items: flex-start;
+  width: 100%;
   padding: 12px;
   color: hsl(var(--foreground));
+  outline: none;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 9px;
-  outline: none;
   transition: all 160ms ease;
 }
 
@@ -1061,11 +1061,11 @@ onMounted(loadAreas);
 
 .building-nav-item__icon {
   display: flex;
-  width: 34px;
-  height: 34px;
   flex: none;
   align-items: center;
   justify-content: center;
+  width: 34px;
+  height: 34px;
   color: hsl(var(--muted-foreground));
   background: hsl(var(--muted));
   border-radius: 9px;
@@ -1082,10 +1082,10 @@ onMounted(loadAreas);
 }
 
 .building-detail {
-  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -1101,9 +1101,9 @@ onMounted(loadAreas);
 .floor-toolbar {
   display: flex;
   flex: none;
+  gap: 16px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
   padding: 15px 16px;
   border-bottom: 1px solid hsl(var(--border));
 }
@@ -1111,8 +1111,8 @@ onMounted(loadAreas);
 .floor-tabs {
   display: flex;
   flex: none;
-  align-items: center;
   gap: 8px;
+  align-items: center;
   padding: 10px 16px;
   overflow-x: auto;
   background: hsl(var(--muted) / 40%);
@@ -1121,17 +1121,17 @@ onMounted(loadAreas);
 
 .floor-tab {
   display: inline-flex;
-  height: 32px;
   flex: none;
-  align-items: center;
   gap: 6px;
+  align-items: center;
+  height: 32px;
   padding: 0 10px;
-  color: hsl(var(--muted-foreground));
   font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
-  cursor: pointer;
 }
 
 .floor-tab:hover {
@@ -1140,8 +1140,8 @@ onMounted(loadAreas);
 }
 
 .floor-tab--active {
-  color: hsl(var(--primary));
   font-weight: 500;
+  color: hsl(var(--primary));
   background: hsl(var(--primary) / 10%);
   border-color: hsl(var(--primary) / 35%);
 }
@@ -1149,9 +1149,9 @@ onMounted(loadAreas);
 .floor-tab > span {
   min-width: 18px;
   padding: 0 5px;
-  color: hsl(var(--muted-foreground));
   font-size: 11px;
   line-height: 18px;
+  color: hsl(var(--muted-foreground));
   text-align: center;
   background: hsl(var(--muted));
   border-radius: 9px;
@@ -1176,11 +1176,11 @@ onMounted(loadAreas);
 
 .room-card__icon {
   display: flex;
-  width: 36px;
-  height: 36px;
   flex: none;
   align-items: center;
   justify-content: center;
+  width: 36px;
+  height: 36px;
   color: hsl(var(--primary));
   background: hsl(var(--primary) / 10%);
   border-radius: 9px;
@@ -1206,24 +1206,24 @@ onMounted(loadAreas);
 }
 
 .room-card__meta span {
-  color: hsl(var(--muted-foreground));
   font-size: 10px;
+  color: hsl(var(--muted-foreground));
 }
 
 .room-card__meta strong {
   margin-top: 2px;
   overflow: hidden;
-  color: hsl(var(--foreground));
+  text-overflow: ellipsis;
   font-size: 12px;
   font-weight: 500;
-  text-overflow: ellipsis;
+  color: hsl(var(--foreground));
   white-space: nowrap;
 }
 
 .room-card__actions {
   display: flex;
-  justify-content: flex-end;
   gap: 2px;
+  justify-content: flex-end;
   padding: 8px 10px;
   background: hsl(var(--muted) / 40%);
   border-top: 1px solid hsl(var(--border));
@@ -1231,8 +1231,8 @@ onMounted(loadAreas);
 
 @media (max-width: 960px) {
   .building-header-content {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .building-workspace {
@@ -1258,8 +1258,8 @@ onMounted(loadAreas);
 
   .build-overview > :deep(.ant-card-body) > div:first-child,
   .floor-toolbar {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .room-grid {

@@ -3,7 +3,7 @@ import type { VbenFormSchema } from '@vben/common-ui';
 import type { VxeTableGridOptions } from '#/adapter/vxe-table';
 import type { ShipmentApi } from '#/api/shipment';
 
-export const COST_STATUS_MAP: Record<string, { color: string; text: string; }> =
+export const COST_STATUS_MAP: Record<string, { color: string; text: string }> =
   {
     APPLIED: { text: '已生效', color: 'success' },
     REVOKED: { text: '已撤销', color: 'error' },

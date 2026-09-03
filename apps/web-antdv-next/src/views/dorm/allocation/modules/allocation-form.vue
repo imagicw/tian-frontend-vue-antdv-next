@@ -112,7 +112,11 @@ const orderColumns = [
                 {},
                 `入住时间：${formatServiceDate(getStartTime(record))} ~ ${formatServiceDate(getEndTime(record))}`,
               ),
-              h('div', {}, `入住人：${getGuestNames(record).join('、') || '未填写'}`),
+              h(
+                'div',
+                {},
+                `入住人：${getGuestNames(record).join('、') || '未填写'}`,
+              ),
             ]),
         },
         {
@@ -159,9 +163,7 @@ function validateOrders(list: DormApi.DormOrder[]) {
   if (currencies.size > 1) {
     return '所选订单存在多个币种，请选择相同币种的订单进行分摊';
   }
-  const areas = new Set(
-    list.map((order) => order.dormOrderSnapshot?.areaName),
-  );
+  const areas = new Set(list.map((order) => order.dormOrderSnapshot?.areaName));
   if (areas.size > 1) {
     return '所选订单存在多个区域，请选择相同区域的订单进行分摊';
   }
@@ -191,9 +193,7 @@ function recomputeAmounts() {
     });
     const lastRow = rows.value[lastIndex];
     if (lastRow) {
-      lastRow.allocatedAmount = Number(
-        (total - sumOfAllButLast).toFixed(2),
-      );
+      lastRow.allocatedAmount = Number((total - sumOfAllButLast).toFixed(2));
     }
   } else {
     rows.value.forEach((row) => {
@@ -270,8 +270,7 @@ function validateRows(): string {
   } else {
     if (
       rows.value.some(
-        (row) =>
-          row.allocatedAmount === undefined || row.allocatedAmount <= 0,
+        (row) => row.allocatedAmount === undefined || row.allocatedAmount <= 0,
       )
     ) {
       return '请为每一行填写分摊金额';
@@ -335,20 +334,24 @@ const [Modal, modalApi] = useVbenModal({
       rows.value = [];
       return;
     }
-    const data = modalApi.getData<{ orders: DormApi.DormOrder[] }>();
+    const data = modalApi.getData() as
+      | undefined
+      | { orders: DormApi.DormOrder[] };
     orders.value = data?.orders ?? [];
     errorMessage.value = validateOrders(orders.value);
     allocationType.value = 1;
     settlementYear.value = new Date().getFullYear();
     settlementMonth.value = undefined;
     remark.value = '';
-    if (!errorMessage.value) {
-      rows.value = [
-        { deptId: undefined, allocationRatio: 100, allocatedAmount: totalPrice.value },
-      ];
-    } else {
-      rows.value = [];
-    }
+    rows.value = errorMessage.value
+      ? []
+      : [
+          {
+            deptId: undefined,
+            allocationRatio: 100,
+            allocatedAmount: totalPrice.value,
+          },
+        ];
   },
 });
 
@@ -481,8 +484,9 @@ onMounted(async () => {
 
         <div class="mt-2 text-right">
           <Text strong>
-            已分摊 {{ formatAmount(totalAllocatedAmount) }}
-            ({{ totalAllocatedRatio.toFixed(2) }}%)
+            已分摊 {{ formatAmount(totalAllocatedAmount) }} ({{
+              totalAllocatedRatio.toFixed(2)
+            }}%)
           </Text>
           <Text
             v-if="Math.abs(balance) > 0.001"
@@ -490,8 +494,9 @@ onMounted(async () => {
             class="ml-2"
           >
             {{ balance >= 0 ? '剩余 ' : '超出 '
-            }}{{ formatAmount(Math.abs(balance)) }}
-            ({{ (100 - totalAllocatedRatio).toFixed(2) }}%)
+            }}{{ formatAmount(Math.abs(balance)) }} ({{
+              (100 - totalAllocatedRatio).toFixed(2)
+            }}%)
           </Text>
         </div>
       </div>

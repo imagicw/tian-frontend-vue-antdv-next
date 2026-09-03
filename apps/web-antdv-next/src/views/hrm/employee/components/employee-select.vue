@@ -59,11 +59,14 @@ const showClear = computed(
 );
 
 async function resolveItems(value?: null | number | number[]) {
-  const ids = Array.isArray(value)
-    ? value
-    : value === undefined || value === null
-      ? []
-      : [value];
+  let ids: number[];
+  if (Array.isArray(value)) {
+    ids = value;
+  } else if (value === undefined || value === null) {
+    ids = [];
+  } else {
+    ids = [value];
+  }
   if (ids.length === 0) {
     selectedItems.value = [];
     return;
@@ -96,12 +99,11 @@ function handleClick(event: MouseEvent) {
     emit('change', undefined);
     return;
   }
+  const selectedIds = Array.isArray(props.modelValue)
+    ? props.modelValue
+    : [props.modelValue].filter((id): id is number => Boolean(id));
   dialogRef.value?.open({
-    selectedIds: Array.isArray(props.modelValue)
-      ? props.modelValue
-      : props.modelValue
-        ? [props.modelValue]
-        : [],
+    selectedIds,
     disabledIds: props.disabledIds,
     entryStatus: props.entryStatus,
     multiple: props.multiple,
@@ -111,7 +113,8 @@ function handleClick(event: MouseEvent) {
 
 function handleSelected(rows: HrmEmployeeApi.Employee[]) {
   const row = rows[0];
-  selectedItems.value = props.multiple ? rows : row ? [row] : [];
+  const singleSelection = row ? [row] : [];
+  selectedItems.value = props.multiple ? rows : singleSelection;
   emit(
     'update:modelValue',
     props.multiple ? rows.map((item) => item.id!) : row?.id,

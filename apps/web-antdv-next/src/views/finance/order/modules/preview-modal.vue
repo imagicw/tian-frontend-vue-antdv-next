@@ -141,7 +141,7 @@ const [Modal, modalApi] = useVbenModal({
       pageNo.value = 1;
       return;
     }
-    task.value = modalApi.getData<FinanceEcApi.ECOrderTask>();
+    task.value = modalApi.getData() as FinanceEcApi.ECOrderTask | undefined;
     if (isCA.value) {
       rateReady.value = false;
       if (!loadCachedRate()) await fetchRate();
@@ -268,8 +268,8 @@ async function handleDownloadCsv() {
       <template v-else>
         <div class="mb-2 flex justify-end">
           <Button :loading="downloading" @click="handleDownloadCsv">
-下载订单
-</Button>
+            下载订单
+          </Button>
         </div>
         <div class="overflow-auto">
           <VxeTable

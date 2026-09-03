@@ -47,7 +47,8 @@ export function useOrderDetailSchema(): DescriptionItemSchema[] {
     {
       field: 'serviceDays',
       label: '入住天数',
-      render: (val: number) => (val == null ? '-' : `${val} 天`),
+      render: (val: number) =>
+        val === null || val === undefined ? '-' : `${val} 天`,
     },
   ];
 }

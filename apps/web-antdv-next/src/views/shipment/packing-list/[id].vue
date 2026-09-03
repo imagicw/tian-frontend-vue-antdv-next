@@ -70,7 +70,7 @@ const orderColumns = [
     title: '箱号',
     key: 'cartonRange',
     render: (_value: unknown, record: any) =>
-      record.cartonNoFrom == null
+      record.cartonNoFrom === null || record.cartonNoFrom === undefined
         ? '-'
         : `${record.cartonNoFrom}~${record.cartonNoTo}`,
   },

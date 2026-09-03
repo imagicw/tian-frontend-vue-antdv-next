@@ -54,7 +54,9 @@ const [Drawer, drawerApi] = useVbenDrawer({
   footer: false,
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    inventory.value = drawerApi.getData<FinanceEcApi.ECInventory>();
+    inventory.value = drawerApi.getData() as
+      | FinanceEcApi.ECInventory
+      | undefined;
     pageNo.value = 1;
     pageSize.value = 20;
     await fetchLogs();

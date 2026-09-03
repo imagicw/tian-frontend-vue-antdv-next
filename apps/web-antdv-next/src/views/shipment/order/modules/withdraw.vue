@@ -90,7 +90,7 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<WithdrawModalData>();
+    const data = modalApi.getData() as undefined | WithdrawModalData;
     mode.value = data?.mode ?? 'direct';
     order.value = data?.order;
     await formApi.resetForm();

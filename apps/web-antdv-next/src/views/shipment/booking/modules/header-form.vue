@@ -95,7 +95,9 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    booking.value = modalApi.getData<ShipmentApi.ShipmentBooking>();
+    booking.value = modalApi.getData() as
+      | ShipmentApi.ShipmentBooking
+      | undefined;
     await formApi.resetForm();
     if (booking.value) await formApi.setValues(booking.value);
   },

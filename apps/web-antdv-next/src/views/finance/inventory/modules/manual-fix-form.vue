@@ -42,7 +42,9 @@ const [Form, formApi] = useVbenForm({
   showDefaultActions: false,
 });
 
-const inventory = computed(() => modalApi.getData<FinanceEcApi.ECInventory>());
+const inventory = computed(
+  () => modalApi.getData() as FinanceEcApi.ECInventory | undefined,
+);
 
 const [Modal, modalApi] = useVbenModal({
   async onConfirm() {
@@ -65,7 +67,7 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<FinanceEcApi.ECInventory>();
+    const data = modalApi.getData() as FinanceEcApi.ECInventory | undefined;
     if (data) {
       await formApi.setValues({ newQuantity: data.remainingQuantity });
     }

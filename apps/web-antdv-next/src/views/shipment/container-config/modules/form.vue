@@ -142,7 +142,7 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<ShipmentApi.ContainerConfig>();
+    const data = modalApi.getData() as ShipmentApi.ContainerConfig | undefined;
     isEdit.value = !!data?.id;
     await formApi.resetForm();
     if (data?.id) await formApi.setValues(data);

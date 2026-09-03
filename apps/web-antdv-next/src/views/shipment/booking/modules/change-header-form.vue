@@ -92,7 +92,8 @@ const [Modal, modalApi] = useVbenModal({
     if (!valid) return;
     modalApi.lock();
     try {
-      const data = modalApi.getData<OpenData>();
+      const data = modalApi.getData() as OpenData | undefined;
+      if (!data) return;
       const values = await formApi.getValues();
       await saveBookingChangeHeader({
         changeId: data.changeId,
@@ -107,7 +108,7 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<OpenData>();
+    const data = modalApi.getData() as OpenData | undefined;
     await formApi.resetForm();
     if (data?.booking) await formApi.setValues(data.booking);
   },

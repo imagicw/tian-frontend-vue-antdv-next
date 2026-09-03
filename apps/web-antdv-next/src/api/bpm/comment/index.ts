@@ -37,4 +37,3 @@ export const getCommentListByProcessInstanceId = async (
 export const createComment = async (taskId: string, message: string) => {
   return await requestClient.post('/bpm/comment/create', { taskId, message });
 };
-

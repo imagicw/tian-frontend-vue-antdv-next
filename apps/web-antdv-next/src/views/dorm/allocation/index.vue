@@ -15,7 +15,11 @@ import { TableAction, useVbenVxeGrid } from '#/adapter/vxe-table';
 import { getAllocationPage, getOrderPage } from '#/api/dorm';
 import { getSimpleUserList } from '#/api/system/user';
 
-import { ALLOCATION_STATUS_MAP, useGridColumns, useGridFormSchema } from './data';
+import {
+  ALLOCATION_STATUS_MAP,
+  useGridColumns,
+  useGridFormSchema,
+} from './data';
 import AllocationForm from './modules/allocation-form.vue';
 
 // Primary entry point is the settled-order multi-select on the Order list page
@@ -128,7 +132,11 @@ const pickerColumns = [
                 {},
                 `入住时间：${formatServiceDate(getStartTime(record))} ~ ${formatServiceDate(getEndTime(record))}`,
               ),
-              h('div', {}, `入住人：${getGuestNames(record).join('、') || '未填写'}`),
+              h(
+                'div',
+                {},
+                `入住人：${getGuestNames(record).join('、') || '未填写'}`,
+              ),
             ]),
         },
         {
@@ -235,8 +243,7 @@ function handlePickerConfirm() {
     ...order,
     userName:
       order.userName ||
-      users.value.find((u) => String(u.id) === String(order.userId))
-        ?.nickname,
+      users.value.find((u) => String(u.id) === String(order.userId))?.nickname,
   }));
   formModalApi.setData({ orders }).open();
 }
