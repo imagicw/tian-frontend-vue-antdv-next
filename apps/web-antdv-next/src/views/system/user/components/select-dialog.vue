@@ -30,15 +30,6 @@ const deptTreeRef = ref<InstanceType<typeof DeptTreeSelect>>(); // 部门树
 function useUserSelectGridFormSchema(): VbenFormSchema[] {
   return [
     {
-      fieldName: 'username',
-      label: '用户名称',
-      component: 'Input',
-      componentProps: {
-        allowClear: true,
-        placeholder: '请输入用户名称',
-      },
-    },
-    {
       fieldName: 'nickname',
       label: '用户昵称',
       component: 'Input',
@@ -238,7 +229,7 @@ async function resetQueryState() {
   await gridApi.grid.clearCheckboxRow();
   await gridApi.grid.clearCheckboxReserve();
   await gridApi.grid.clearRadioRow();
-  await gridApi.formApi.resetForm();
+  await gridApi.formApi.reset();
   deptTreeRef.value?.reset();
 }
 

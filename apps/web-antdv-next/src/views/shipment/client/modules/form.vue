@@ -9,8 +9,25 @@ import { message } from 'antdv-next';
 
 import { useVbenForm } from '#/adapter/form';
 import { createClientProfile, updateClientProfile } from '#/api/shipment';
+import { $t } from '#/locales';
 
 const emit = defineEmits<{ success: [] }>();
+
+function notificationRuleSchema(fieldName: string, label: string) {
+  return {
+    fieldName,
+    label,
+    component: 'RadioGroup' as const,
+    componentProps: {
+      options: [
+        { label: $t('ui.shipment.enabled'), value: true },
+        { label: $t('ui.shipment.disabled'), value: false },
+      ],
+      optionType: 'button' as const,
+    },
+    defaultValue: false,
+  };
+}
 
 const [Form, formApi] = useVbenForm({
   commonConfig: {
@@ -58,6 +75,19 @@ const [Form, formApi] = useVbenForm({
       componentProps: { min: 0, placeholder: '天数' },
     },
     {
+      fieldName: 'cartonSplitTiming',
+      label: '纸箱分柜关口',
+      component: 'RadioGroup',
+      componentProps: {
+        options: [
+          { label: '发布前分柜', value: 1 },
+          { label: '发布后分柜', value: 2 },
+        ],
+        optionType: 'button',
+      },
+      defaultValue: 1,
+    },
+    {
       fieldName: 'leadTimeDomestic',
       label: '国内提前期(天)',
       component: 'InputNumber',
@@ -82,10 +112,34 @@ const [Form, formApi] = useVbenForm({
       },
       defaultValue: false,
     },
+    notificationRuleSchema(
+      'containerAllFinalConfirmNotifyEnabled',
+      $t('ui.shipment.containerAllFinalConfirmation'),
+    ),
+    notificationRuleSchema(
+      'containerResponsibleFinalConfirmNotifyEnabled',
+      $t('ui.shipment.containerResponsibleFinalConfirmation'),
+    ),
+    notificationRuleSchema(
+      'containerDeliveryDateFinalConfirmNotifyEnabled',
+      $t('ui.shipment.containerDeliveryDateFinalConfirmation'),
+    ),
+    notificationRuleSchema(
+      'bulkAllFinalConfirmNotifyEnabled',
+      $t('ui.shipment.bulkAllFinalConfirmation'),
+    ),
+    notificationRuleSchema(
+      'bulkResponsibleFinalConfirmNotifyEnabled',
+      $t('ui.shipment.bulkResponsibleFinalConfirmation'),
+    ),
+    notificationRuleSchema(
+      'bulkDeliveryDateFinalConfirmNotifyEnabled',
+      $t('ui.shipment.bulkDeliveryDateFinalConfirmation'),
+    ),
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { rows: 3 },
     },
   ],
@@ -111,7 +165,7 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<ShipmentApi.ClientProfile>();
+    const data = modalApi.getData() as ShipmentApi.ClientProfile | undefined;
     isEdit.value = !!data?.id;
     await formApi.resetForm();
     if (data?.id) await formApi.setValues(data);

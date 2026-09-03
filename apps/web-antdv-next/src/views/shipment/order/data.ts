@@ -11,7 +11,7 @@ export const ORDER_STATUS_MAP: Record<string, { color: string; text: string }> =
   {
     '0': { text: '草稿', color: 'default' },
     '5': { text: '已发布', color: 'blue' },
-    '10': { text: '订舱中', color: 'processing' },
+    '10': { text: '已占用', color: 'processing' },
     '15': { text: '已提交', color: 'cyan' },
     '20': { text: '已确认', color: 'success' },
     '30': { text: '已出运', color: 'green' },
@@ -32,6 +32,7 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOrder>
     { field: 'poNo', title: 'PO号', width: 150, fixed: 'left' },
     { field: 'packId', title: 'Pack ID', width: 140 },
     { field: 'clientCode', title: '客户代码', width: 110 },
+    { field: 'responsibleUserName', title: '责任业务员', width: 110 },
     { field: 'shippingNo', title: '运编号', width: 130 },
     { field: 'destinationCountry', title: '目的国', width: 80 },
     { field: 'deliveryDate', title: '交期', width: 110 },
@@ -42,7 +43,10 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOrder>
       width: 100,
       slots: {
         default: ({ row }) => {
-          const status = row.status == null ? '' : String(row.status);
+          const status =
+            row.status === undefined || row.status === null
+              ? ''
+              : String(row.status);
           return [
             h(
               Tag,
@@ -54,14 +58,33 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOrder>
       },
     },
     { field: 'totalVolume', title: '总体积(CBM)', width: 120 },
+    { field: 'hangingPackageCount', title: '挂装包数', width: 100 },
     { field: 'productionLocationName', title: '生产地', width: 80 },
     { field: 'loadingFactoryName', title: '装柜工厂', minWidth: 150 },
     { field: 'warehouseDeliveryDate', title: '仓库交货日', width: 130 },
     { field: 'createTime', title: '创建时间', width: 180 },
     {
+      field: 'pendingWithdrawRequestId',
+      title: '撤回申请',
+      width: 100,
+      slots: {
+        default: ({ row }) => {
+          if (!row.pendingWithdrawRequestId) return '-';
+          return [
+            h(
+              Tag,
+              { color: 'warning' },
+              () =>
+                `待处理${row.pendingWithdrawRequestApplicantName ? `（${row.pendingWithdrawRequestApplicantName}）` : ''}`,
+            ),
+          ];
+        },
+      },
+    },
+    {
       field: 'actions',
       title: '操作',
-      width: 150,
+      width: 220,
       fixed: 'right',
       slots: { default: 'actions' },
     },
@@ -81,6 +104,24 @@ export function useGridFormSchema(): VbenFormSchema[] {
       label: '客户代码',
       component: 'Input',
       componentProps: { placeholder: '请输入客户代码' },
+    },
+    {
+      fieldName: 'destinationCountry',
+      label: '目的国',
+      component: 'Input',
+      componentProps: { placeholder: '请输入目的国' },
+    },
+    {
+      fieldName: 'deliveryDateStart',
+      label: '交期起始',
+      component: 'DatePicker',
+      componentProps: { valueFormat: 'YYYY-MM-DD' },
+    },
+    {
+      fieldName: 'deliveryDateEnd',
+      label: '交期截止',
+      component: 'DatePicker',
+      componentProps: { valueFormat: 'YYYY-MM-DD' },
     },
     {
       fieldName: 'status',

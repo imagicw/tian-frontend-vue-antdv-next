@@ -251,17 +251,15 @@ loadClients();
       <template v-if="clientProfile">
         <Descriptions size="small" :column="4" bordered class="mb-4">
           <DescriptionsItem label="允许箱型">
-{{
-            clientProfile.allowedContainerTypes ?? '-'
-          }}
-</DescriptionsItem>
+            {{ clientProfile.allowedContainerTypes ?? '-' }}
+          </DescriptionsItem>
           <DescriptionsItem label="拼柜交期跨度">
-{{
-            clientProfile.consolidationDeliveryDays != null
-              ? `${clientProfile.consolidationDeliveryDays} 天`
-              : '-'
-          }}
-</DescriptionsItem>
+            {{
+              clientProfile.consolidationDeliveryDays != null
+                ? `${clientProfile.consolidationDeliveryDays} 天`
+                : '-'
+            }}
+          </DescriptionsItem>
           <DescriptionsItem label="两地装货">
             <Tag
               :color="clientProfile.allowMultiLocation ? 'success' : 'default'"
@@ -270,10 +268,8 @@ loadClients();
             </Tag>
           </DescriptionsItem>
           <DescriptionsItem label="允许港口">
-{{
-            clientProfile.allowedPorts ?? '-'
-          }}
-</DescriptionsItem>
+            {{ clientProfile.allowedPorts ?? '-' }}
+          </DescriptionsItem>
         </Descriptions>
       </template>
     </Card>
@@ -329,17 +325,17 @@ loadClients();
         <Divider>拼柜方案</Divider>
         <Row :gutter="16" class="mb-2">
           <Col :span="6">
-<Statistic title="匹配订单" :value="suggestResult.matchedOrders" />
-</Col>
+            <Statistic title="匹配订单" :value="suggestResult.matchedOrders" />
+          </Col>
           <Col :span="6">
-<Statistic
+            <Statistic
               title="未匹配订单"
               :value="suggestResult.unmatchedOrders"
-          />
-</Col>
+            />
+          </Col>
           <Col :span="6">
-<Statistic title="拼柜方案数" :value="suggestResult.plans.length" />
-</Col>
+            <Statistic title="拼柜方案数" :value="suggestResult.plans.length" />
+          </Col>
         </Row>
 
         <Spin :spinning="loading">

@@ -113,7 +113,7 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'remark',
       label: '备注',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { rows: 3, placeholder: '备注信息' },
       formItemClass: 'col-span-4',
     },
@@ -141,7 +141,9 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<ShipmentApi.ShipmentPackingList>();
+    const data = modalApi.getData() as
+      | ShipmentApi.ShipmentPackingList
+      | undefined;
     isEdit.value = !!data?.id;
     await formApi.resetForm();
     if (data?.id) await formApi.setValues(data);

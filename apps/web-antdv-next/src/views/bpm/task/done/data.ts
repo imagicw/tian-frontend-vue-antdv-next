@@ -7,6 +7,7 @@ import { getDictOptions } from '@vben/hooks';
 import { getCategorySimpleList } from '#/api/bpm/category';
 import { getSimpleProcessDefinitionList } from '#/api/bpm/definition';
 import { getRangePickerDefaultProps } from '#/utils';
+import { formatBpmSummary } from '#/utils/business-form';
 
 /** 列表的搜索表单 */
 export function useGridFormSchema(): VbenFormSchema[] {
@@ -78,13 +79,11 @@ export function useGridColumns(): VxeTableGridOptions['columns'] {
       field: 'processInstance.summary',
       title: '摘要',
       minWidth: 200,
-      formatter: ({ cellValue }) => {
-        return cellValue && cellValue.length > 0
-          ? cellValue
-              .map((item: any) => `${item.key} : ${item.value}`)
-              .join('\n')
-          : '-';
-      },
+      formatter: ({ row }) =>
+        formatBpmSummary(
+          row.processInstance?.summary,
+          row.processInstance?.processDefinition?.formCustomViewPath,
+        ),
     },
     {
       field: 'processInstance.startUser.nickname',
@@ -92,7 +91,7 @@ export function useGridColumns(): VxeTableGridOptions['columns'] {
       minWidth: 120,
     },
     {
-      field: 'processInstance.createTime',
+      field: 'processInstance.startTime',
       title: '发起时间',
       minWidth: 180,
       formatter: 'formatDateTime',

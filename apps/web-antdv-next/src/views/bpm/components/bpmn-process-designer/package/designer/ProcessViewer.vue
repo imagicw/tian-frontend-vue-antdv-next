@@ -271,7 +271,7 @@ const onSelectElement = (element: any) => {
 };
 
 /** 初始化 BPMN 视图 */
-const importXML = async (xml?: string) => {
+const importXML = async (xml: string) => {
   // 清空流程图
   clearViewer();
 
@@ -389,7 +389,9 @@ const setProcessStatus = (view: any) => {
 watch(
   () => props.xml,
   (newXml) => {
-    importXML(newXml || '');
+    if (processCanvas.value) {
+      importXML(newXml || '');
+    }
   },
 );
 
@@ -403,7 +405,7 @@ watch(
 
 /** 画布容器挂载后再执行首次导入。 */
 onMounted(() => {
-  importXML(props.xml || '');
+  importXML(props.xml);
   setProcessStatus(props.view);
 });
 
@@ -415,7 +417,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="process-viewer">
-    <div style="height: 100%" ref="processCanvas" v-show="!isLoading"></div>
+    <div style="height: 100%" ref="processCanvas"></div>
     <!-- 自定义箭头样式，用于已完成状态下流程连线箭头 -->
     <defs ref="customDefs">
       <marker

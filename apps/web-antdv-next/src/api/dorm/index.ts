@@ -142,6 +142,8 @@ export namespace DormApi {
     adjustReason?: string;
     operationType?: string;
     version?: number;
+    /** 该住宿人当前生效床位安排是否只涉及一个 (roomId, bedId)，即是否满足"重新排房"前提 */
+    reallocatable?: boolean;
   }
 
   export interface DormOrder {
@@ -193,6 +195,7 @@ export namespace DormApi {
     startDate: string;
     plannedStartDate?: string;
     plannedEndDate?: string;
+    reallocatable?: boolean;
   }
 
   export interface RoomAllocationBed {
@@ -409,10 +412,20 @@ export const updateRoom = (data: Partial<DormApi.DormRoom>) =>
 export const deleteRoom = (id: number) =>
   requestClient.delete(`${BASE}/room/delete`, { params: { id } });
 
-export const getRoomAvailable = (data: { buildId: number; endTime: string; startTime: string }) =>
-  requestClient.post<DormApi.DormRoom[]>(`${BASE}/room/get-room-available`, data);
+export const getRoomAvailable = (data: {
+  buildId: number;
+  endTime: string;
+  startTime: string;
+}) =>
+  requestClient.post<DormApi.DormRoom[]>(
+    `${BASE}/room/get-room-available`,
+    data,
+  );
 
-export const getRoomCalendar = (params: { buildId: number; startTime: string[] }) =>
+export const getRoomCalendar = (params: {
+  buildId: number;
+  startTime: string[];
+}) =>
   requestClient.get<DormApi.DormSubOrder[]>(`${BASE}/room/calendar-room`, {
     params,
   });
@@ -426,10 +439,13 @@ export const getRoomOrderInfo = (orderSerial: string) =>
 export const allocateDormRooms = (data: DormApi.AllocateRoomData) =>
   requestClient.post(`${BASE}/room/allocate-rooms`, data);
 
-export const cancelDormOrder = (data: { orderDetailId?: number; orderSerial: string }) =>
-  requestClient.post(`${BASE}/room/cancel-order`, null, { params: data });
+export const cancelDormOrder = (data: {
+  orderDetailId?: number;
+  orderSerial: string;
+}) => requestClient.post(`${BASE}/room/cancel-order`, null, { params: data });
 
-export const changeDormRoom = (data: any) => requestClient.post(`${BASE}/room/change-room`, data);
+export const changeDormRoom = (data: any) =>
+  requestClient.post(`${BASE}/room/change-room`, data);
 
 export const changeDormRoomDate = (data: any) =>
   requestClient.post(`${BASE}/room/change-room-serve-time`, data);
@@ -439,21 +455,28 @@ export const getRoomAllocationWorkbench = (params: {
   endDate: string;
   startDate: string;
 }) =>
-  requestClient.get<DormApi.RoomAllocationWorkbench>(`${BASE}/room-allocation/workbench`, {
-    params,
-  });
+  requestClient.get<DormApi.RoomAllocationWorkbench>(
+    `${BASE}/room-allocation/workbench`,
+    {
+      params,
+    },
+  );
 
 export const getRoomAllocationHistory = (guestId: number) =>
-  requestClient.get<DormApi.RoomAllocationHistory[]>(`${BASE}/room-allocation/history`, {
-    params: { guestId },
-  });
+  requestClient.get<DormApi.RoomAllocationHistory[]>(
+    `${BASE}/room-allocation/history`,
+    {
+      params: { guestId },
+    },
+  );
 
 export const allocateDormBed = (data: DormApi.RoomAllocationAllocateData) =>
   requestClient.post(`${BASE}/room-allocation/allocate`, data);
 
 /** 批量保存排房草稿 */
-export const allocateDormBeds = (data: DormApi.RoomAllocationBatchAllocateData) =>
-  requestClient.post(`${BASE}/room-allocation/allocate-batch`, data);
+export const allocateDormBeds = (
+  data: DormApi.RoomAllocationBatchAllocateData,
+) => requestClient.post(`${BASE}/room-allocation/allocate-batch`, data);
 
 /** 调整待排住宿人的计划住宿日期（仅适用于尚未排房的住宿人） */
 export const adjustPendingGuestPeriod = (data: {
@@ -465,15 +488,20 @@ export const adjustPendingGuestPeriod = (data: {
   version?: number;
 }) => requestClient.post(`${BASE}/room-allocation/adjust-period`, data);
 
-/** 管理员纠错：已排房住宿人在同一床位上修正入住/退宿日期 */
-export const correctRoomAllocationPeriod = (data: {
+/**
+ * 重新排房：日历拖拽（同床位整体平移或跨床位整体挪动）统一走此接口，
+ * 所见即所得——新房间/床位与新起止日期一起提交，不产生历史分段。
+ */
+export const reallocateDormBed = (data: {
+  bedId?: number;
   endDate: string;
   guestId: number;
   operationNo: string;
   reason: string;
+  roomId: number;
   startDate: string;
   version?: number;
-}) => requestClient.post(`${BASE}/room-allocation/correction`, data);
+}) => requestClient.post(`${BASE}/room-allocation/reallocate`, data);
 
 export const changeDormStayPeriod = (data: {
   endDate: string;
@@ -516,13 +544,16 @@ export const settleDormOrder = (data: DormApi.SettleOrderData) =>
 
 // ─── Fee Allocation ──────────────────────────────────────────────────────────
 export const getAllocationPage = (params: PageParam & Record<string, any>) =>
-  requestClient.get<PageResult<DormApi.DormFeeAllocation>>(`${BASE}/dept-fee-allocation/page`, {
-    params,
-  });
+  requestClient.get<PageResult<DormApi.DormFeeAllocation>>(
+    `${BASE}/dept-fee-allocation/page`,
+    {
+      params,
+    },
+  );
 
 export const getAllocationDetail = (feeAllocationOrderNo: string) =>
   requestClient.get<DormApi.DormFeeAllocation>(
-    `${BASE}/dept-fee-allocation/get/${feeAllocationOrderNo}`
+    `${BASE}/dept-fee-allocation/get/${feeAllocationOrderNo}`,
   );
 
 export const createAllocation = (data: DormApi.DormFeeAllocateOrders) =>

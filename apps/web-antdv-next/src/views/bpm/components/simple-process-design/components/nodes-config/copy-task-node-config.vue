@@ -319,6 +319,8 @@ defineExpose({ showCopyTaskNodeConfig }); // 暴露方法给父组件
                 mode="multiple"
                 :options="userOptions"
                 :field-names="{ label: 'nickname', value: 'id' }"
+                show-search
+                option-filter-prop="label"
               />
             </FormItem>
             <FormItem

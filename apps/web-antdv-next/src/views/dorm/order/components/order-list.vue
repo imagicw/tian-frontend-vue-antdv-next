@@ -78,13 +78,15 @@ const canManageOrders = computed(
   () => isAdmin.value && hasAccessByCodes(['dorm:room:update']),
 );
 const canAllocateFee = computed(
-  () => isAdmin.value && hasAccessByCodes(['dorm:dept-fee-allocation:allocate']),
+  () =>
+    isAdmin.value && hasAccessByCodes(['dorm:dept-fee-allocation:allocate']),
 );
 const pageTitle = computed(() => (isAdmin.value ? '住宿订单' : '我的订单'));
 
 const selectedOrders = computed(() =>
   orders.value.filter(
-    (order) => order.orderSerial && selectedSerials.value.has(order.orderSerial),
+    (order) =>
+      order.orderSerial && selectedSerials.value.has(order.orderSerial),
   ),
 );
 
@@ -361,7 +363,10 @@ onMounted(() => {
         <div class="order-toolbar__heading">
           <h2>{{ pageTitle }}</h2>
           <div v-if="canAllocateFee" class="ml-auto flex items-center gap-2">
-            <span v-if="selectedSerials.size > 0" class="text-muted-foreground text-sm">
+            <span
+              v-if="selectedSerials.size > 0"
+              class="text-muted-foreground text-sm"
+            >
               已选 {{ selectedSerials.size }} 个订单
             </span>
             <Button v-if="selectedSerials.size > 0" @click="clearSelection">

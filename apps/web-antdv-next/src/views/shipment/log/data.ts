@@ -15,19 +15,24 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentOperat
   ];
 }
 
-export function useGridFormSchema(): VbenFormSchema[] {
+export function useGridFormSchema(defaultValues?: {
+  businessId?: number;
+  businessType?: string;
+}): VbenFormSchema[] {
   return [
     {
       fieldName: 'businessType',
       label: '业务类型',
       component: 'Input',
       componentProps: { placeholder: '请输入业务类型' },
+      defaultValue: defaultValues?.businessType,
     },
     {
       fieldName: 'businessId',
       label: '业务ID',
       component: 'InputNumber',
       componentProps: { placeholder: '请输入业务ID' },
+      defaultValue: defaultValues?.businessId,
     },
     {
       fieldName: 'operator',

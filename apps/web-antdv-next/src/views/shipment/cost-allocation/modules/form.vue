@@ -87,7 +87,7 @@ const [Form, formApi] = useVbenForm({
     {
       fieldName: 'shippingNosText',
       label: '运编号列表',
-      component: 'Textarea',
+      component: 'TextArea',
       componentProps: { rows: 5, placeholder: '每行或逗号分隔输入运编号' },
       rules: 'required',
       formItemClass: 'col-span-4',
@@ -163,7 +163,9 @@ const [Modal, modalApi] = useVbenModal({
       previewDetails.value = [];
       return;
     }
-    const data = modalApi.getData<ShipmentApi.ShipmentCostAllocation>();
+    const data = modalApi.getData() as
+      | ShipmentApi.ShipmentCostAllocation
+      | undefined;
     await formApi.resetForm();
     if (data) {
       const shippingNosText = (data.shippingNos ?? []).join('\n');
@@ -178,8 +180,8 @@ const [Modal, modalApi] = useVbenModal({
     <Form class="mx-4" />
     <div class="mx-4 mb-2">
       <Button :loading="previewLoading" @click="handlePreview">
-预览分摊结果
-</Button>
+        预览分摊结果
+      </Button>
     </div>
     <template v-if="previewDetails.length > 0">
       <Divider title-placement="start">分摊明细预览</Divider>

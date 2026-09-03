@@ -210,7 +210,12 @@ const [Grid, gridApi] = useVbenVxeGrid({
         class="mr-4 h-full w-1/6 min-w-0"
         :body-style="{ height: '100%', overflow: 'hidden auto' }"
       >
-        <DeptTreeSelect @select="handleDeptSelect" />
+        <DeptTreeSelect
+          style="
+
+--dept-tree-max-height: none"
+          @select="handleDeptSelect"
+        />
       </Card>
       <!-- 右侧用户列表 -->
       <div class="w-5/6 min-w-0">

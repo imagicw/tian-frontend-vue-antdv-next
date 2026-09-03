@@ -127,7 +127,7 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<DormApi.DormArea>();
+    const data = modalApi.getData() as DormApi.DormArea | undefined;
     isEdit.value = Boolean(data?.id);
     await formApi.resetForm();
     if (data?.id) {

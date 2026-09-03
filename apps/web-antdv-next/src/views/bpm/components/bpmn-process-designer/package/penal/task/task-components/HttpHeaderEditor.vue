@@ -74,8 +74,8 @@ const [Modal, modalApi] = useVbenModal({
     if (!isOpen) {
       return;
     }
-    const { headers } = modalApi.getData();
-    headerList.value = parseHeaders(headers);
+    const data = modalApi.getData() as undefined | { headers?: string };
+    headerList.value = parseHeaders(data?.headers ?? '');
   },
   onConfirm: handleSave,
 });

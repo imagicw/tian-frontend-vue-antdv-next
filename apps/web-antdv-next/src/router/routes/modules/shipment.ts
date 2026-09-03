@@ -48,6 +48,17 @@ const routes: RouteRecordRaw[] = [
       },
       {
         meta: {
+          access: ['container:document-handler-config:query'],
+          hideInMenu: true,
+          title: '单证责任人配置',
+        },
+        name: 'ShipmentDocumentHandlerConfig',
+        path: 'document-handler-config',
+        component: () =>
+          import('#/views/shipment/document-handler-config/index.vue'),
+      },
+      {
+        meta: {
           access: ['container:packing-list:query'],
           hideInMenu: true,
           title: '装箱单管理',
@@ -125,6 +136,17 @@ const routes: RouteRecordRaw[] = [
         name: 'ShipmentLog',
         path: 'log',
         component: () => import('#/views/shipment/log/index.vue'),
+      },
+      {
+        meta: {
+          access: ['container:order:query'],
+          hideInMenu: true,
+          title: '最终确认通知',
+        },
+        name: 'ShipmentFinalConfirmNotificationOutbox',
+        path: 'final-confirm-notification-outbox',
+        component: () =>
+          import('#/views/shipment/final-confirm-notification-outbox/index.vue'),
       },
     ],
   },

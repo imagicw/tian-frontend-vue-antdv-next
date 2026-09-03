@@ -27,6 +27,7 @@ const allowedScopes = [
   'erp',
   'wms',
   'report',
+  'hrm',
 ];
 
 // precomputed scope

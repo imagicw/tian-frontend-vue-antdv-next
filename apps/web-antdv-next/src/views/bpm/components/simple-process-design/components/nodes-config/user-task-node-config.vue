@@ -767,6 +767,8 @@ onMounted(() => {
                 :field-names="{ label: 'nickname', value: 'id' }"
                 allow-clear
                 mode="multiple"
+                show-search
+                option-filter-prop="label"
               />
             </FormItem>
             <FormItem
@@ -1048,6 +1050,8 @@ onMounted(() => {
                 :field-names="{ label: 'nickname', value: 'id' }"
                 allow-clear
                 mode="multiple"
+                show-search
+                option-filter-prop="label"
               />
             </FormItem>
 

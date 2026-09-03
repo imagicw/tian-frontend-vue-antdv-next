@@ -139,9 +139,12 @@ async function onAreaChange(areaId?: number) {
 }
 
 async function loadBuildingAttention(buildId?: number) {
-  buildingAttention.value = buildId
-    ? (await getBuildInfo(buildId))?.attention
-    : undefined;
+  if (!buildId) {
+    buildingAttention.value = undefined;
+    return;
+  }
+  const buildInfo = await getBuildInfo(buildId);
+  buildingAttention.value = buildInfo?.attention;
 }
 
 async function onBuildingChange() {
@@ -154,17 +157,16 @@ async function onBuildingChange() {
 function updateRoomType(room: DormApi.CheckInInfo, roomType: number) {
   room.roomType = roomType;
   const people = room.checkInPersons ?? [];
-  if (people.length < roomType) {
-    room.checkInPersons = [
-      ...people,
-      ...Array.from({ length: roomType - people.length }, () => ({
-        email: '',
-        name: '',
-      })),
-    ];
-  } else {
-    room.checkInPersons = people.slice(0, roomType);
-  }
+  room.checkInPersons =
+    people.length < roomType
+      ? [
+          ...people,
+          ...Array.from({ length: roomType - people.length }, () => ({
+            email: '',
+            name: '',
+          })),
+        ]
+      : people.slice(0, roomType);
 }
 
 function addRoom() {
@@ -211,7 +213,7 @@ async function refreshApprovalPrediction() {
   const data = await getApprovalDetailApi({
     activityId: BpmNodeIdEnum.START_USER_NODE_ID,
     processDefinitionId: processDefinition.value.id,
-    processVariables: JSON.stringify({ buildId: formData.buildId }),
+    processVariablesStr: JSON.stringify({ buildId: formData.buildId }),
   });
   activityNodes.value = data?.activityNodes ?? [];
   const selectableNodeIds = activityNodes.value
@@ -221,7 +223,10 @@ async function refreshApprovalPrediction() {
     )
     .map((node) => node.id);
   startUserSelectAssignees.value = Object.fromEntries(
-    selectableNodeIds.map((id) => [id, startUserSelectAssignees.value[id] ?? []]),
+    selectableNodeIds.map((id) => [
+      id,
+      startUserSelectAssignees.value[id] ?? [],
+    ]),
   );
 }
 
@@ -298,7 +303,10 @@ onMounted(init);
 <template>
   <Page auto-content-height>
     <Spin :spinning="loading" tip="正在加载公寓申请...">
-      <Card class="apply-card min-h-full" :body-style="{ padding: '20px 24px 24px' }">
+      <Card
+        class="apply-card min-h-full"
+        :body-style="{ padding: '20px 24px 24px' }"
+      >
         <template #title>
           <div class="section-title">
             <span class="section-title__icon">
@@ -488,11 +496,7 @@ onMounted(init);
                       </div>
                     </Card>
                   </div>
-                  <button
-                    type="button"
-                    class="add-room-btn"
-                    @click="addRoom"
-                  >
+                  <button type="button" class="add-room-btn" @click="addRoom">
                     <IconifyIcon icon="lucide:plus" :size="16" />
                     添加房间
                   </button>
@@ -591,10 +595,7 @@ onMounted(init);
                     <template #title>
                       <div class="section-title">
                         <span class="section-title__icon is-blue">
-                          <IconifyIcon
-                            icon="lucide:circle-alert"
-                            :size="16"
-                          />
+                          <IconifyIcon icon="lucide:circle-alert" :size="16" />
                         </span>
                         <strong>注意事项</strong>
                       </div>
@@ -650,11 +651,7 @@ onMounted(init);
                 v-else-if="processDefinition?.modelType === BpmModelType.SIMPLE"
                 :simple-json="simpleJson"
               />
-              <Empty
-                v-else
-                class="mt-20"
-                description="暂无流程图数据"
-              />
+              <Empty v-else class="mt-20" description="暂无流程图数据" />
             </div>
           </TabPane>
         </Tabs>
@@ -696,9 +693,9 @@ onMounted(init);
 }
 
 .section-title strong {
-  color: hsl(var(--foreground));
   font-size: 15px;
   line-height: 1.35;
+  color: hsl(var(--foreground));
 }
 
 .section-title small {
@@ -711,8 +708,8 @@ onMounted(init);
 .room-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
   gap: 14px;
+  align-items: start;
   margin-bottom: 16px;
 }
 
@@ -785,6 +782,7 @@ onMounted(init);
 
 .add-room-btn {
   display: flex;
+  gap: 6px;
   align-items: center;
   justify-content: center;
   width: 100%;
@@ -796,7 +794,6 @@ onMounted(init);
   background: transparent;
   border: 1px dashed hsl(var(--border));
   border-radius: 8px;
-  gap: 6px;
   transition: all 0.2s ease;
 }
 
@@ -842,9 +839,9 @@ onMounted(init);
 
 .area-cover__placeholder {
   display: flex;
-  height: 100%;
   align-items: center;
   justify-content: center;
+  height: 100%;
   color: hsl(var(--muted-foreground));
 }
 
@@ -862,7 +859,7 @@ onMounted(init);
   font-size: inherit;
   line-height: 1.7;
   color: hsl(var(--muted-foreground));
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .notice-text :deep(p) {

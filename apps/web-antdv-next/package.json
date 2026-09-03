@@ -26,9 +26,9 @@
     "#/*": "./src/*"
   },
   "dependencies": {
-    "@event-calendar/core": "^3.12.0",
-    "@event-calendar/interaction": "^3.12.0",
-    "@event-calendar/resource-timeline": "^3.12.0",
+    "@event-calendar/core": "catalog:",
+    "@event-calendar/interaction": "catalog:",
+    "@event-calendar/resource-timeline": "catalog:",
     "@form-create/antd-designer": "catalog:",
     "@form-create/antdv-next": "catalog:",
     "@tinymce/tinymce-vue": "catalog:",

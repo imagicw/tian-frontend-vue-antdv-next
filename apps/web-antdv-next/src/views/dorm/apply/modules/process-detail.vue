@@ -93,7 +93,7 @@ watch([applicationId, () => props.data], loadApplication, { immediate: true });
 </script>
 
 <template>
-  <Spin :spinning="loading" tip="正在加载住宿申请...">
+  <Spin :spinning="loading" description="正在加载住宿申请...">
     <Alert
       v-if="loadError"
       message="住宿申请加载失败"

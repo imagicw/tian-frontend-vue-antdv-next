@@ -7,16 +7,16 @@ import { h } from 'vue';
 
 import { Tag } from 'antdv-next';
 
+import { $t } from '#/locales';
+
 export const BOOKING_STATUS_MAP: Record<
   string,
-  { color: string; text: string; }
+  { color: string; text: string }
 > = {
   '0': { text: '草稿', color: 'default' },
-  '1': { text: '已提交', color: 'processing' },
-  '2': { text: '已确认', color: 'success' },
-  '3': { text: '已驳回', color: 'warning' },
-  '4': { text: '已出运', color: 'green' },
-  '5': { text: '已取消', color: 'error' },
+  '2': { text: '已生效', color: 'success' },
+  '4': { text: '已取消', color: 'error' },
+  '6': { text: '已出运', color: 'green' },
 };
 
 export const BOOKING_TYPE_MAP: Record<number, string> = {
@@ -53,6 +53,15 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ShipmentBookin
     { field: 'clientName', title: '客户名称', width: 140 },
     { field: 'freightForwarder', title: '货代', width: 140 },
     { field: 'productionCountry', title: '生产国家', width: 110 },
+    {
+      field: 'finalConfirmNotificationRulesConfigured',
+      title: $t('ui.shipment.finalConfirmationRules'),
+      width: 130,
+      formatter: ({ cellValue }) =>
+        cellValue
+          ? $t('ui.shipment.rulesSnapshotted')
+          : $t('ui.shipment.rulesMissing'),
+    },
     { field: 'applicant', title: '申请人', width: 100 },
     { field: 'booker', title: '订舱人', width: 100 },
     { field: 'vesselDate', title: '船期', width: 110 },

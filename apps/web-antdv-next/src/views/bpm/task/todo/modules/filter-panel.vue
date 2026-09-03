@@ -44,7 +44,7 @@ function handleReset() {
     v-if="isMobile"
     :open="open"
     placement="bottom"
-    height="auto"
+    size="auto"
     :title="$t('bpm.todo.filter.title')"
     @update:open="emit('update:open', $event)"
   >
@@ -78,7 +78,7 @@ function handleReset() {
     v-else-if="open"
     class="shrink-0 shadow-sm"
     size="small"
-    :body-style="{ padding: '16px' }"
+    :styles="{ body: { padding: '16px' } }"
   >
     <Form layout="vertical">
       <FormItem :label="$t('bpm.todo.filter.category')">

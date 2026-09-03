@@ -42,6 +42,19 @@
     "closing": "Closing {0} ...",
     "closeSuccess": "{0} closed successfully"
   },
+  "shipment": {
+    "finalConfirmationRules": "Final confirmation rules",
+    "rulesSnapshotted": "Snapshotted",
+    "rulesMissing": "Configuration pending",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "containerAllFinalConfirmation": "Consolidation: all-booking completion notification",
+    "containerResponsibleFinalConfirmation": "Consolidation: same-responsible-user notification",
+    "containerDeliveryDateFinalConfirmation": "Consolidation: same-delivery-date notification",
+    "bulkAllFinalConfirmation": "Bulk: all-booking completion notification",
+    "bulkResponsibleFinalConfirmation": "Bulk: same-responsible-user notification",
+    "bulkDeliveryDateFinalConfirmation": "Bulk: same-delivery-date notification"
+  },
   "placeholder": {
     "input": "Please enter",
     "select": "Please select",
@@ -168,7 +181,7 @@
     },
     "lockScreen": {
       "title": "Lock Screen",
-      "screenButton": "Unlock",
+      "screenButton": "Lock",
       "password": "Password",
       "placeholder": "Please enter password",
       "unlock": "Click to unlock",

@@ -292,7 +292,7 @@ async function previewImage(
         return h(
           PreviewGroupComponent,
           {
-            class: 'hidden',
+            classes: { popup: { root: '!z-2000' } },
             preview: {
               open: open.value,
               current: currentIndex,
@@ -376,6 +376,7 @@ function cropImage(file: File, aspectRatio: string | undefined) {
               ]),
               centered: true,
               width: 548,
+              zIndex: 9999,
               keyboard: false,
               maskClosable: false,
               closable: false,
@@ -699,6 +700,9 @@ async function initComponentAdapter() {
       component: Select,
       loadingSlot: 'suffixIcon',
       modelPropName: 'value',
+      // ApiComponent 始终把选项归一化为 { label, value }，默认按 label（如人员昵称）过滤，
+      // 避免只能按 id 检索；调用方可通过传入 optionFilterProp 覆盖此默认值。
+      optionFilterProp: 'label',
       visibleEvent: 'onOpenChange',
     }),
     ApiTreeSelect: withDefaultPlaceholder(ApiComponent, 'select', {
@@ -725,9 +729,7 @@ async function initComponentAdapter() {
       modelValueProp: 'value',
     }),
     Input: withDefaultPlaceholder(Input, 'input'),
-    InputNumber: withDefaultPlaceholder(InputNumber, 'input', {
-      style: { width: '100%' },
-    }),
+    InputNumber: withDefaultPlaceholder(InputNumber, 'input'),
     InputPassword: withDefaultPlaceholder(InputPassword, 'input'),
     Mentions: withDefaultPlaceholder(Mentions, 'input'),
     // 自定义主要按钮

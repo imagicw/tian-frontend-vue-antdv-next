@@ -36,7 +36,13 @@ const [Modal, modalApi] = useVbenModal({
   onOpenChange(isOpen) {
     if (isOpen) {
       // 获取传递的数据
-      const conditionObj = modalApi.getData();
+      const conditionObj = modalApi.getData() as
+        | undefined
+        | {
+            conditionExpression?: string;
+            conditionGroups?: ConditionGroup;
+            conditionType: ConditionType;
+          };
       if (conditionObj) {
         conditionData.value.conditionType = conditionObj.conditionType;
         conditionData.value.conditionExpression =

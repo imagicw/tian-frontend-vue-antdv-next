@@ -12,17 +12,17 @@ import { Input, message, Modal } from 'antdv-next';
 import { ACTION_ICON, TableAction, useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
   cancelBooking,
-  confirmBooking,
   deleteBooking,
   getBookingPage,
-  rejectBooking,
+  publishBooking,
   shipBooking,
-  submitBooking,
 } from '#/api/shipment';
 
+import { canMaintainBookingHeader, canModifyBooking } from './change-logic';
 import { useGridColumns, useGridFormSchema } from './data';
 import BookingDetail from './modules/detail.vue';
 import BookingForm from './modules/form.vue';
+import BookingHeaderForm from './modules/header-form.vue';
 
 const router = useRouter();
 const selectedRows = ref<ShipmentApi.ShipmentBooking[]>([]);
@@ -33,6 +33,10 @@ const [FormModal, formModalApi] = useVbenModal({
 });
 const [DetailModal, detailModalApi] = useVbenModal({
   connectedComponent: BookingDetail,
+  destroyOnClose: true,
+});
+const [HeaderModal, headerModalApi] = useVbenModal({
+  connectedComponent: BookingHeaderForm,
   destroyOnClose: true,
 });
 
@@ -49,12 +53,21 @@ function handleEdit(row: ShipmentApi.ShipmentBooking) {
 function handleDetail(row: ShipmentApi.ShipmentBooking) {
   detailModalApi.setData({ id: row.id }).open();
 }
+function handleMaintainHeader(row: ShipmentApi.ShipmentBooking) {
+  headerModalApi.setData(row).open();
+}
 function handleSplit(row: ShipmentApi.ShipmentBooking) {
   router.push(`/shipment/split?bookingId=${row.id}`);
 }
 function handleSelectedSplit() {
   const row = selectedRows.value[0];
   if (selectedRows.value.length === 1 && row) handleSplit(row);
+}
+function handleLog(row: ShipmentApi.ShipmentBooking) {
+  router.push({
+    path: '/shipment/log',
+    query: { businessType: 'BOOKING', businessId: row.id },
+  });
 }
 
 async function handleDelete(row: ShipmentApi.ShipmentBooking) {
@@ -86,7 +99,7 @@ function confirmWithReason(
     async onOk() {
       if (!reason.trim()) {
         message.warning(`请输入${label}`);
-        throw undefined;
+        throw new Error('validation failed');
       }
       await onOk(reason);
     },
@@ -113,35 +126,12 @@ function confirmWithOptionalReason(
   });
 }
 
-function handleSubmit(row: ShipmentApi.ShipmentBooking) {
+function handlePublish(row: ShipmentApi.ShipmentBooking) {
   confirmWithOptionalReason(
-    `确认提交订舱「${row.bookingNo ?? row.id}」？`,
+    `确认发布订舱「${row.bookingNo ?? row.id}」？发布后立即生效并通知单证。`,
     async (remarks) => {
-      await submitBooking(row.id, remarks);
-      message.success('提交成功');
-      handleRefresh();
-    },
-  );
-}
-
-function handleConfirm(row: ShipmentApi.ShipmentBooking) {
-  confirmWithOptionalReason(
-    `确认订舱「${row.bookingNo ?? row.id}」？`,
-    async (remarks) => {
-      await confirmBooking(row.id, { remarks });
-      message.success('确认成功');
-      handleRefresh();
-    },
-  );
-}
-
-function handleReject(row: ShipmentApi.ShipmentBooking) {
-  confirmWithReason(
-    `驳回订舱「${row.bookingNo ?? row.id}」`,
-    '驳回原因',
-    async (reason) => {
-      await rejectBooking(row.id, reason);
-      message.success('驳回成功');
+      await publishBooking(row.id, remarks);
+      message.success('发布成功，订舱已生效并通知单证');
       handleRefresh();
     },
   );
@@ -170,20 +160,14 @@ function handleShip(row: ShipmentApi.ShipmentBooking) {
   );
 }
 
-function canSubmit(status: string) {
-  return status === '0' || status === '3';
-}
-function canConfirm(status: string) {
-  return status === '1';
-}
-function canReject(status: string) {
-  return status === '1';
+function canPublish(status: string) {
+  return status === '0';
 }
 function canShip(status: string) {
   return status === '2';
 }
 function canCancel(status: string) {
-  return status !== '2' && status !== '4' && status !== '5';
+  return status !== '4' && status !== '6';
 }
 
 function getBookingActions(row: ShipmentApi.ShipmentBooking): ActionItem[] {
@@ -195,42 +179,41 @@ function getBookingActions(row: ShipmentApi.ShipmentBooking): ActionItem[] {
       onClick: handleDetail.bind(null, row),
     },
     {
-      label: '编辑',
-      type: 'link',
-      auth: ['container:booking:update'],
-      onClick: handleEdit.bind(null, row),
-    },
-    {
       label: '分柜结果',
       type: 'link',
       auth: ['container:split:query'],
       onClick: handleSplit.bind(null, row),
     },
+    {
+      label: '日志',
+      type: 'link',
+      auth: ['container:operation-log:query'],
+      onClick: handleLog.bind(null, row),
+    },
   ];
   const status = String(row.status);
-  if (canSubmit(status)) {
-    actions.push({
-      label: '提交',
+  if (canModifyBooking(status)) {
+    actions.splice(1, 0, {
+      label: '编辑',
       type: 'link',
-      auth: ['container:booking:submit'],
-      onClick: handleSubmit.bind(null, row),
+      auth: ['container:booking:update'],
+      onClick: handleEdit.bind(null, row),
     });
   }
-  if (canConfirm(status)) {
+  if (canMaintainBookingHeader(status)) {
     actions.push({
-      label: '确认',
+      label: '维护单证资料',
       type: 'link',
-      auth: ['container:booking:confirm'],
-      onClick: handleConfirm.bind(null, row),
+      auth: ['container:booking:document-maintain'],
+      onClick: handleMaintainHeader.bind(null, row),
     });
   }
-  if (canReject(status)) {
+  if (canPublish(status)) {
     actions.push({
-      label: '驳回',
+      label: '发布',
       type: 'link',
-      danger: true,
-      auth: ['container:booking:reject'],
-      onClick: handleReject.bind(null, row),
+      auth: ['container:booking:publish'],
+      onClick: handlePublish.bind(null, row),
     });
   }
   if (canShip(status)) {
@@ -250,17 +233,19 @@ function getBookingActions(row: ShipmentApi.ShipmentBooking): ActionItem[] {
       onClick: handleCancel.bind(null, row),
     });
   }
-  actions.push({
-    label: '删除',
-    type: 'link',
-    danger: true,
-    icon: ACTION_ICON.DELETE,
-    auth: ['container:booking:delete'],
-    popConfirm: {
-      title: `确定删除订舱「${row.bookingNo ?? row.id}」吗？`,
-      confirm: handleDelete.bind(null, row),
-    },
-  });
+  if (canModifyBooking(status)) {
+    actions.push({
+      label: '删除',
+      type: 'link',
+      danger: true,
+      icon: ACTION_ICON.DELETE,
+      auth: ['container:booking:delete'],
+      popConfirm: {
+        title: `确定删除订舱「${row.bookingNo ?? row.id}」吗？`,
+        confirm: handleDelete.bind(null, row),
+      },
+    });
+  }
   return actions;
 }
 
@@ -301,6 +286,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
 <template>
   <Page auto-content-height>
     <FormModal @success="handleRefresh" />
+    <HeaderModal @success="handleRefresh" />
     <DetailModal />
     <Grid table-title="订舱管理">
       <template #toolbar-tools>

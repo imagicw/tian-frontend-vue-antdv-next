@@ -7,6 +7,7 @@ import { getDictOptions } from '@vben/hooks';
 import { getCategorySimpleList } from '#/api/bpm/category';
 import { getSimpleProcessDefinitionList } from '#/api/bpm/definition';
 import { getRangePickerDefaultProps } from '#/utils';
+import { formatBpmSummary } from '#/utils/business-form';
 
 /** 列表的搜索表单 */
 export function useGridFormSchema(): VbenFormSchema[] {
@@ -82,9 +83,11 @@ export function useGridColumns(): VxeTableGridOptions['columns'] {
       field: 'summary',
       title: '摘要',
       minWidth: 200,
-      slots: {
-        default: 'slot-summary',
-      },
+      formatter: ({ row }) =>
+        formatBpmSummary(
+          row.summary,
+          row.processDefinition?.formCustomViewPath,
+        ),
     },
     {
       field: 'categoryName',

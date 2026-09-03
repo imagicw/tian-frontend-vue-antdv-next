@@ -421,6 +421,8 @@ onBeforeUnmount(() => {
         @change="updateElementTask"
         :options="userOptions"
         :field-names="{ label: 'nickname', value: 'id' }"
+        show-search
+        option-filter-prop="label"
       />
     </FormItem>
     <FormItem

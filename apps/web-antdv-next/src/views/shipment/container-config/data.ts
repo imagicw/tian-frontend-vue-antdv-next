@@ -12,6 +12,11 @@ export function useGridColumns(): VxeTableGridOptions<ShipmentApi.ContainerConfi
     { field: 'containerType', title: '箱型', width: 100 },
     { field: 'minVolume', title: '最小体积(CBM)', width: 130 },
     { field: 'maxVolume', title: '最大体积(CBM)', width: 130 },
+    { field: 'minHangingRods', title: '最小杆数', width: 100 },
+    { field: 'maxHangingRods', title: '最大杆数', width: 100 },
+    { field: 'ropesPerRod', title: '每杆绳数', width: 100 },
+    { field: 'packagesPerRope', title: '每绳包数', width: 100 },
+    { field: 'knotsPerRope', title: '每绳绳结数', width: 110 },
     { field: 'sortOrder', title: '排序', width: 80 },
     {
       field: 'enabled',

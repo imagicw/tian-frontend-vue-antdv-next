@@ -29,6 +29,7 @@ Node: `^22.18.0 || ^24.0.0` (`.node-version` pins `24.16.0`). Use `pnpm`, not `n
 ## Architecture
 
 ### Monorepo layout
+
 ```
 apps/web-antdv-next/    # The only app — main web application
 packages/
@@ -47,6 +48,7 @@ docs/                     # VitePress docs site (upstream vben-admin docs, mostl
 ```
 
 ### Key directories in `apps/web-antdv-next/src/`
+
 ```
 router/routes/modules/   # Route definitions per domain (dashboard, dorm, bpm, finance, shipment, ai, infra, system, leave)
 views/                   # Page components — mirrors router modules, plus erp/mp/report/wms/_core
@@ -60,6 +62,7 @@ Custom (Tian-specific) business domains live under `views/dorm`, `views/bpm`, `v
 ### Cross-domain context maps
 
 Some business domains keep a `CONTEXT.md` alongside their views, documenting domain terminology and cross-domain relationships (see `CONTEXT-MAP.md` at repo root for the index):
+
 - `apps/web-antdv-next/src/views/dorm/CONTEXT.md` — 宿舍管理 (dormitory allocation: 区域/楼栋/房间/床位, 住宿申请与订单, 排房与调房, 部门费用分摊)
 - `apps/web-antdv-next/src/views/bpm/CONTEXT.md` — BPM 工作流 (process definitions/instances, approval tasks, business-form rendering)
 

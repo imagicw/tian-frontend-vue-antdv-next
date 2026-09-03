@@ -72,9 +72,9 @@ const [Form, formApi] = useVbenForm({
       fieldName: 'buildStorey',
       label: '楼层数',
       component: 'InputNumber',
-      componentProps: (values) => ({
+      componentProps: (ctx) => ({
         class: 'w-full',
-        disabled: Boolean(values.id),
+        disabled: Boolean(ctx.rootValues?.id),
         min: 1,
         max: 100,
         placeholder: '请输入楼层数',
@@ -126,7 +126,9 @@ const [Modal, modalApi] = useVbenModal({
   },
   async onOpenChange(isOpen: boolean) {
     if (!isOpen) return;
-    const data = modalApi.getData<Partial<DormApi.DormBuilding>>();
+    const data = modalApi.getData() as
+      | Partial<DormApi.DormBuilding>
+      | undefined;
     isEdit.value = !!data?.id;
     await formApi.resetForm();
     if (data) await formApi.setValues(data);

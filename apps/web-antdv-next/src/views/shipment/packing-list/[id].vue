@@ -70,7 +70,7 @@ const orderColumns = [
     title: '箱号',
     key: 'cartonRange',
     render: (_value: unknown, record: any) =>
-      record.cartonNoFrom == null
+      record.cartonNoFrom === null || record.cartonNoFrom === undefined
         ? '-'
         : `${record.cartonNoFrom}~${record.cartonNoTo}`,
   },
@@ -88,7 +88,7 @@ async function loadData() {
   try {
     const [pl, orders] = await Promise.all([
       getPackingList(packingListId),
-      getOrderPage({ pageNo: 1, pageSize: 500, packingListId }),
+      getOrderPage({ pageNo: 1, pageSize: 100, packingListId }),
     ]);
     packingList.value = pl;
     linkedOrders.value = (orders as any).list ?? [];

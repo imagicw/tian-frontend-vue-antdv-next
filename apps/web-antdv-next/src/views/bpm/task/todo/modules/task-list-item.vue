@@ -5,6 +5,8 @@ import { Avatar, Tag } from 'antdv-next';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
+import { mapBpmSummaryItems } from '#/utils/business-form';
+
 defineOptions({ name: 'BpmTodoTaskListItem' });
 
 const props = withDefaults(
@@ -30,15 +32,16 @@ function getAvatarSrc() {
 }
 
 function getRelativeTime() {
-  const time = props.task.processInstance?.createTime;
+  const time = props.task.processInstance?.startTime;
   return time ? dayjs(time).fromNow() : '-';
 }
 
 function getSummaryItems() {
-  const summary = props.task.processInstance?.summary;
-  return summary && summary.length > 0
-    ? summary.slice(0, props.maxSummary)
-    : [];
+  const items = mapBpmSummaryItems(
+    props.task.processInstance?.summary,
+    props.task.processInstance?.processDefinition?.formCustomViewPath,
+  );
+  return items.slice(0, props.maxSummary);
 }
 </script>
 
@@ -78,7 +81,7 @@ function getSummaryItems() {
       class="text-muted-foreground mt-2 space-y-1 text-sm"
     >
       <div v-for="item in getSummaryItems()" :key="item.key" class="truncate">
-        <span class="text-muted-foreground/80">{{ item.key }}：</span>
+        <span class="text-muted-foreground/80">{{ item.label }}：</span>
         <span>{{ item.value }}</span>
       </div>
     </div>

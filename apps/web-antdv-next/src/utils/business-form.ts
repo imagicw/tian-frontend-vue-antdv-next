@@ -20,7 +20,6 @@ const businessFormRegistrations: BusinessFormRegistration[] = [
     legacyAdapterKeys: ['dormFormFields'],
     value: '/dorm/apply/modules/process-detail.vue',
     summaryFields: [
-      { key: 'applicantName', label: '申请人' },
       { key: 'roomInfo', label: '房间信息' },
       { key: 'checkInDate', label: '入住时间' },
     ],
@@ -55,4 +54,41 @@ export function getBusinessFormSummaryFields(
     (item) => item.value === formCustomViewPath,
   );
   return registration?.summaryFields ?? [];
+}
+
+export interface BpmSummaryItem {
+  key: string;
+  value: string;
+}
+
+/**
+ * 将流程实例摘要的 key 解析为展示用标签。
+ * NORMAL 表单的 key 后端已下发为字段标题，直接展示；CUSTOM 表单的 key 是原始变量名，
+ * 需要按 formCustomViewPath 查字典转换为中文标签，字典未登记时原样透传。
+ */
+export function mapBpmSummaryItems(
+  summary: BpmSummaryItem[] | undefined,
+  formCustomViewPath?: string,
+): { key: string; label: string; value: string }[] {
+  if (!summary || summary.length === 0) return [];
+
+  const fields = getBusinessFormSummaryFields(formCustomViewPath);
+  const labelByKey = new Map(fields.map((field) => [field.key, field.label]));
+
+  return summary.map((item) => ({
+    key: item.key,
+    label: labelByKey.get(item.key) ?? item.key,
+    value: item.value,
+  }));
+}
+
+/** 格式化流程实例摘要为拼接文本，供已办任务/我的流程等表格 formatter 共用。 */
+export function formatBpmSummary(
+  summary: BpmSummaryItem[] | undefined,
+  formCustomViewPath?: string,
+): string {
+  const items = mapBpmSummaryItems(summary, formCustomViewPath);
+  if (items.length === 0) return '-';
+
+  return items.map((item) => `${item.label} : ${item.value}`).join('\n');
 }

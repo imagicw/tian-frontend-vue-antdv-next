@@ -17,7 +17,7 @@ const [Modal, modalApi] = useVbenModal({
       return;
     }
     // 加载数据
-    const data = modalApi.getData();
+    const data = modalApi.getData() as undefined | { id?: number };
     if (!data || !data.id) {
       return;
     }
